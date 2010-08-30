@@ -161,15 +161,14 @@ and/or contributing improvements to the code:
   (save-excursion
     (if buffer (set-buffer buffer))
     (if (eq buffer malyon-transcript-buffer)
-	(progn
-	  (if malyon-print-separator
-	      (progn
-		(mapc 'malyon-putchar-transcript '(?\n ?\n ?* ?  ?* ?  ?*))
-		(center-line)
-		(mapc 'malyon-putchar-transcript '(?\n ?\n))
-		(setq malyon-print-separator nil)))
-	  (narrow-to-region (point-max) (point-max)))
+	(malyon-begin-section)
       (erase-buffer))))
+
+(if (fboundp 'int-to-char)
+    (defalias 'malyon-int-to-char 'int-to-char)
+  (defun malyon-int-to-char (i)
+    "Convert an integer into a character."
+    i))
 
 (if (fboundp 'mapc)
     (defalias 'malyon-mapc 'mapc)
@@ -188,6 +187,12 @@ and/or contributing improvements to the code:
 	'()
       (nconc (funcall function (car list))
 	     (malyon-mapcan function (cdr list))))))
+
+(if (fboundp 'multibyte-char-to-unibyte)
+    (defalias 'malyon-multibyte-char-to-unibyte 'multibyte-char-to-unibyte)
+  (defun malyon-multibyte-char-to-unibyte (char)
+    "Convert a multibyte character to unibyte."
+    char))
 
 (defun malyon-point-max (&optional buffer)
   "Get the point-max of the given buffer."
@@ -238,6 +243,12 @@ and/or contributing improvements to the code:
 	(aset v i (aref s i))
 	(setq i (+ 1 i)))
       v)))
+
+(if (fboundp 'unibyte-char-to-multibyte)
+    (defalias 'malyon-unibyte-char-to-multibyte 'unibyte-char-to-multibyte)
+  (defun malyon-unibyte-char-to-multibyte (char)
+    "Convert a unibyte character to multibyte."
+    char))
 
 (if (fboundp 'window-displayed-height)
     (defalias 'malyon-window-displayed-height 'window-displayed-height)
@@ -336,6 +347,19 @@ and/or contributing improvements to the code:
 		       (2 . malyon-face-bold)
 		       (4 . malyon-face-italic)
 		       (8 . malyon-face-plain))))
+
+(defvar malyon-print-separator nil
+  "A flag indicating whether to print the * * * separator.")
+
+(defun malyon-begin-section ()
+  "Print a section divider and begin a new section."
+  (if malyon-print-separator
+      (progn
+	(mapc 'malyon-putchar-transcript '(?\n ?\n ?* ?  ?* ?  ?*))
+	(center-line)
+	(mapc 'malyon-putchar-transcript '(?\n ?\n))
+	(setq malyon-print-separator nil)))
+  (narrow-to-region (point-max) (point-max)))
 
 ;; memory utilities
 
@@ -444,7 +468,7 @@ and/or contributing improvements to the code:
 (defun malyon-initialize ()
   "Initialize the z code interpreter."
 ;  (malyon-trace-file)
-  (setq malyon-game-state-quetzal nil) ; TODO disabled for testing
+  (malyon-initialize-quetzal)
   (malyon-initialize-faces)
   (malyon-initialize-status)
   (malyon-initialize-transcript)
@@ -518,7 +542,7 @@ and/or contributing improvements to the code:
   "Initialize the interpreter's internal registers."
   (setq malyon-stack (make-vector 1024 0))
   (setq malyon-stack-pointer -1)
-  (if malyon-game-state-quetzal (malyon-push-stack 0))
+  (malyon-push-initial-frame)
   (setq malyon-frame-pointer malyon-stack-pointer)
   (setq malyon-instruction-pointer (malyon-read-word 6))
   (setq malyon-global-variables (malyon-read-word 12))
@@ -705,7 +729,7 @@ addresses.")
   (setq malyon-default-unicode-table
 	[#x20                                    ;   0
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00      ;   1 -   7
-	 #x08 #x00 ?\n  #x00 #x00 ?\r  #x00 #x00 ;   8 -  15
+	 #x08 #x00 #x00 #x00 #x00 ?\n  #x00 #x00 ;   8 -  15
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ;  16 -  23
 	 #x00 #x00 #x00 #x27 #x00 #x00 #x00 #x00 ;  24 -  31
 	 #x20 #x21 #x22 #x23 #x24 #x25 #x26 #x27 ;  32 -  39
@@ -762,19 +786,22 @@ addresses.")
   "Converts a zscii character to unicode."
   (if (or (< char 0) (> char 255))
       ??
-    (let ((unicode (aref malyon-unicode-table char)))
-      (if (zerop unicode) ?? (unibyte-char-to-multibyte unicode)))))
+    (let ((uni (aref malyon-unicode-table char)))
+      (setq uni (if (malyon-characterp uni) (malyon-char-to-int uni) uni))
+      (if (zerop uni) ?? (malyon-unibyte-char-to-multibyte uni)))))
 
 (defsubst malyon-unicode-to-zscii (char)
   "Converts a unicode character to zscii."
-  (setq char (multibyte-char-to-unibyte char))
-  (let ((i     1)
-	(found 0))
-    (while (and (< i 255) (zerop found))
-      (if (= char (aref malyon-unicode-table i))
-	  (setq found i))
-      (setq i (+ i 1)))
-    found))
+  (setq char (malyon-multibyte-char-to-unibyte char))
+  (setq char (if (malyon-characterp char) (malyon-char-to-int char) char))
+  (let ((i 1) (found 0))
+    (if (= (malyon-char-to-int ?\r) char)
+	(setq found 13)
+      (while (and (< i 255) (zerop found))
+	(if (= char (aref malyon-unicode-table i))
+	    (setq found i))
+	(setq i (+ i 1))))
+    (malyon-int-to-char found)))
 
 ;; output streams
 
@@ -841,9 +868,6 @@ addresses.")
 (defvar malyon-current-face nil
   "The current face in which to display text.")
 
-(defvar malyon-print-separator nil
-  "A flag indicating whether to print the * * * separator.")
-
 (defsubst malyon-abbrev (abbrev x)
   "Print an abbreviation."
   (malyon-print-ztext
@@ -855,7 +879,7 @@ addresses.")
   (if (eq malyon-status-buffer (current-buffer))
       (goto-char malyon-status-buffer-point)
     (goto-char (point-max)))
-  (malyon-output-character ?\n)
+  (malyon-output-character ?\r)
   (if (eq malyon-status-buffer (current-buffer))
       (setq malyon-status-buffer-point (point))
     (goto-char malyon-last-cursor-position-after-input))
@@ -906,6 +930,8 @@ addresses.")
 	 (malyon-print-state-new nil     46 0 0 0))
 	((and (= shift 46) (= x 6))
 	 (malyon-print-state-new nil     -6 0 1 0))
+	((and (= shift 46) (= x 7))
+	 (malyon-print-state-new ?\n     -6 0 0 0))
 	(t
 	 (malyon-print-state-new
 	  (aref malyon-alphabet (+ shift x)) -6 0 0 0))))
@@ -977,8 +1003,7 @@ addresses.")
 
 (defun malyon-putchar-table (char table)
   "Print a single character into a table."
-  (malyon-store-byte (+ 2 table (malyon-read-word table))
-		     (if (char-equal char ?\n) 13 char))
+  (malyon-store-byte (+ 2 table (malyon-read-word table)) char)
   (malyon-store-word table (+ 1 (malyon-read-word table))))
 
 (defun malyon-putchar-printer (char)
@@ -1304,14 +1329,18 @@ gets the remaining lines."
 
 ;; getting and setting the machine state
 
-(defvar malyon-game-state-quetzal t
-  "Store game state information for quetzal.")
-
 (defvar malyon-game-state-restart nil
   "The machine state for implementing restart.")
 
 (defvar malyon-game-state-undo nil
   "The machine state for implementing undo.")
+
+(defvar malyon-game-state-quetzal t
+  "Store game state information for quetzal.")
+
+(defun malyon-initialize-quetzal ()
+  "Initialize quetzal mode."
+  (setq malyon-game-state-quetzal t))
 
 (defun malyon-current-game-state ()
   "Return the current state of the interpreter."
@@ -1349,6 +1378,10 @@ gets the remaining lines."
   (insert-char (logand 255 (lsh dword -8)) 1)
   (insert-char (logand 255 dword) 1))
 
+(defsubst malyon-write-chunk-id-to-file (id)
+  "Write a quetzal chunk id to the last opened file."
+  (insert id))
+
 (defsubst malyon-read-byte-from-file ()
   "Read the next byte from a file."
   (if (= (point) (point-max))
@@ -1366,6 +1399,13 @@ gets the remaining lines."
 	  (lsh (malyon-read-byte-from-file) 16)
 	  (lsh (malyon-read-byte-from-file) 8)
 	  (malyon-read-byte-from-file)))
+
+(defsubst malyon-read-chunk-id-from-file ()
+  "Read a quetzal chunk id from the last opened file."
+  (string (malyon-int-to-char (malyon-read-byte-from-file))
+	  (malyon-int-to-char (malyon-read-byte-from-file))
+	  (malyon-int-to-char (malyon-read-byte-from-file))
+	  (malyon-int-to-char (malyon-read-byte-from-file))))
 
 (defun malyon-get-file-name (address)
   "Retrieves the file name stored at address."
@@ -1386,9 +1426,11 @@ gets the remaining lines."
 	(set-buffer (create-file-buffer file))
 	(malyon-disable-multibyte)
 	(malyon-erase-buffer)
-	(if table
-	    (malyon-save-table table length)
-	  (malyon-save-game-state (malyon-current-game-state)))
+	(cond (table (malyon-save-table table length))
+	      (malyon-game-state-quetzal
+	       (malyon-save-quetzal-state (malyon-current-game-state)))
+	      (t
+	       (malyon-save-game-state (malyon-current-game-state))))
 	(let ((coding-system-for-write 'binary))
 	  (write-file file))
 	(kill-buffer nil)
@@ -1430,7 +1472,115 @@ gets the remaining lines."
       (malyon-write-byte-to-file (aref mem i))
       (setq i (+ 1 i)))))
 
+(defun malyon-save-quetzal-state (state)
+  "Saves the game state to disk in quetzal format."
+  (goto-char (point-min))
+  (malyon-save-quetzal-ifhd state)
+  (malyon-save-quetzal-cmem state)
+  (malyon-save-quetzal-stks state)
+  (goto-char (point-min))
+  (malyon-write-chunk-id-to-file "IFZS")
+  (goto-char (point-min))
+  (malyon-write-dword-to-file (- (point-max) (point-min)))
+  (goto-char (point-min))
+  (malyon-write-chunk-id-to-file "FORM"))
+
+(defun malyon-save-quetzal-ifhd (state)
+  "Saves the IFhd chunk of the quetzal format."
+  (malyon-write-chunk-id-to-file "IFhd")
+  (malyon-write-dword-to-file 13)
+  (malyon-write-word-to-file (malyon-read-word 2))
+  (malyon-write-word-to-file (malyon-read-word 18))
+  (malyon-write-word-to-file (malyon-read-word 20))
+  (malyon-write-word-to-file (malyon-read-word 22))
+  (malyon-write-word-to-file (malyon-read-word 28))
+  (malyon-write-byte-to-file (lsh (aref state 0) -16))
+  (malyon-write-byte-to-file (lsh (aref state 0) -8))
+  (malyon-write-byte-to-file (aref state 0))
+  (malyon-write-byte-to-file 0))
+
+(defun malyon-save-quetzal-cmem (state)
+  "Saves the CMem chunk of the quetzal format."
+  (let ((beginning (point-max))
+	(original  (aref malyon-game-state-restart 4))
+	(current   (aref state 4))
+	(size      (malyon-read-word 14))
+	(byte      0)
+	(count     0)
+	(i         0))
+    (goto-char (point-max))
+    (while (< i size)
+      (setq byte (logxor (aref current i) (aref original i)))
+      (if (zerop byte)
+	  (setq count (+ 1 count))
+	(while (> count 0)
+	  (malyon-write-byte-to-file 0)
+	  (setq count (- count 1))
+	  (malyon-write-byte-to-file (min 255 count))
+	  (setq count (- count (min 255 count))))
+	(malyon-write-byte-to-file byte))
+      (setq i (+ 1 i)))
+    (setq size (- (point-max) beginning))
+    (if (zerop (mod size 2)) '() (malyon-write-byte-to-file 0))
+    (goto-char beginning)
+    (malyon-write-chunk-id-to-file "CMem")
+    (malyon-write-dword-to-file size)))
+
+(defun malyon-save-quetzal-stks (state)
+  "Saves the Stks chunk of the quetzal format."
+  (let ((beginning (point-max))
+	(size      0))
+    (goto-char (point-max))
+    (malyon-save-quetzal-stack-frame (- (aref state 2) 4)
+				     (aref state 1)
+				     (aref state 3))
+    (setq size (- (point-max) beginning))
+    (if (zerop (mod size 2)) '() (malyon-write-byte-to-file 0))
+    (goto-char beginning)
+    (malyon-write-chunk-id-to-file "Stks")
+    (malyon-write-dword-to-file size)))
+
+(defun malyon-save-quetzal-stack-frame (fp sp stack)
+  "Saves the stack frames for the Stks chunk."
+  (let* ((frame       (malyon-get-stack-frame fp sp stack))
+	 (frame-id    (aref frame 0))
+	 (previous-fp (aref frame 1))
+	 (previous-sp (aref frame 2))
+	 (return-addr (aref frame 3))
+	 (result-addr (aref frame 4))
+	 (local-vars  (aref frame 5))
+	 (num-args    (aref frame 6))
+	 (eval-stack  (aref frame 7)))
+    (if (> frame-id 0)
+	(malyon-save-quetzal-stack-frame previous-fp previous-sp stack))
+    (malyon-write-byte-to-file (lsh return-addr -16))
+    (malyon-write-byte-to-file (lsh return-addr -8))
+    (malyon-write-byte-to-file return-addr)
+    (malyon-write-byte-to-file (logior (if result-addr 16 0)
+				       (length local-vars)))
+    (malyon-write-byte-to-file (if result-addr result-addr 0))
+    (malyon-write-byte-to-file (- (lsh 1 num-args) 1))
+    (malyon-write-word-to-file (length eval-stack))
+    (while (not (null local-vars))
+      (malyon-write-word-to-file (car local-vars))
+      (setq local-vars (cdr local-vars)))
+    (while (not (null eval-stack))
+      (malyon-write-word-to-file (car eval-stack))
+      (setq eval-stack (cdr eval-stack)))))
+
 ;; restoring data from disk
+
+(defvar malyon-restore-data-error nil
+  "An error message if restoring data from a file failed.")
+
+(defvar malyon-restore-quetzal-stack nil
+  "A temporary stack for restoring quetzal game states.")
+
+(defvar malyon-restore-quetzal-stack-pointer nil
+  "A temporary stack pointer for restoring quetzal game states.")
+
+(defvar malyon-restore-quetzal-frame-pointer nil
+  "A temporary frame-pointer for restoring quetzal game states.")
 
 (defun malyon-restore-file (file &optional table length)
   "Restore a game state or a memory section from disk."
@@ -1439,6 +1589,7 @@ gets the remaining lines."
       0
     (condition-case nil
 	(save-excursion
+	  (setq malyon-restore-data-error nil)
 	  (set-buffer (create-file-buffer file))
 	  (malyon-disable-multibyte)
 	  (malyon-erase-buffer)
@@ -1447,9 +1598,18 @@ gets the remaining lines."
 	  (goto-char (point-min))
 	  (if table
 	      (malyon-restore-table table length)
-	    (malyon-restore-game-state))
+	    (let* ((first  (malyon-read-chunk-id-from-file))
+		   (second (malyon-read-dword-from-file))
+		   (third  (malyon-read-chunk-id-from-file)))
+	      (if (and (string= "FORM" first) (string= "IFZS" third))
+		  (malyon-restore-quetzal-state (+ 8 second))
+		(goto-char (point-min))
+		(malyon-restore-game-state))))
 	  (kill-buffer nil)
-	  2)
+	  (if (null malyon-restore-data-error)
+	      2
+	    (message malyon-restore-data-error)
+	    0))
       (error 0))))
 
 (defun malyon-restore-table (table length)
@@ -1465,6 +1625,7 @@ gets the remaining lines."
   "Restore a saved game state from disk."
   (let ((len   0)
 	(name  0)
+	(story 0)
 	(ip    0)
 	(sp    0)
 	(fp    0)
@@ -1489,9 +1650,123 @@ gets the remaining lines."
     (while (< i dyn)
       (aset mem i (malyon-read-byte-from-file))
       (setq i (+ 1 i)))
-    (if (string= name malyon-story-file-name)
+    (setq name  (file-name-nondirectory name))
+    (setq story (file-name-nondirectory malyon-story-file-name))
+    (if (or (string-match name story) (string-match story name))
 	(malyon-set-game-state (vector ip sp fp stack mem nil))
-      (message "Invalid save file."))))
+      (setq malyon-restore-data-error "Invalid save file."))))
+
+(defun malyon-restore-quetzal-state (size)
+  "Restore a saved quetzal game state from disk."
+  (let ((chunk-id  nil)
+	(chunk-len 0)
+	(ip        0)
+	(memory    nil)
+	(stack     nil)
+	(beginning 0))
+    (while (< (point) size)
+      (setq chunk-id  (malyon-read-chunk-id-from-file))
+      (setq chunk-len (malyon-read-dword-from-file))
+      (setq beginning (point))
+      (cond ((string= chunk-id "IFhd")
+	     (setq ip (malyon-restore-quetzal-ifhd chunk-len)))
+	    ((string= chunk-id "CMem")
+	     (setq memory (malyon-restore-quetzal-cmem chunk-len)))
+	    ((string= chunk-id "UMem")
+	     (setq memory (malyon-restore-quetzal-umem chunk-len)))
+	    ((string= chunk-id "Stks")
+	     (setq stack (malyon-restore-quetzal-stks chunk-len))))
+      (if (zerop (mod chunk-len 2)) '() (setq chunk-len (+ 1 chunk-len)))
+      (goto-char (+ beginning chunk-len)))
+    (cond ((and ip memory stack)
+	   (malyon-set-game-state (vector ip
+					  (aref stack 0)
+					  (aref stack 1)
+					  (aref stack 2)
+					  memory
+					  t)))
+	  ((null malyon-restore-data-error)
+	   (setq malyon-restore-data-error "invalid quetzal file.")))))
+
+(defun malyon-restore-quetzal-ifhd (size)
+  "Restore an IFhd chunk from disk. Return the instruction pointer."
+  (if (and (= (malyon-read-word-from-file) (malyon-read-word 2))
+	   (= (malyon-read-word-from-file) (malyon-read-word 18))
+	   (= (malyon-read-word-from-file) (malyon-read-word 20))
+	   (= (malyon-read-word-from-file) (malyon-read-word 22))
+	   (= (malyon-read-word-from-file) (malyon-read-word 28)))
+      (logior (lsh (malyon-read-byte-from-file) 16)
+	      (lsh (malyon-read-byte-from-file) 8)
+	      (malyon-read-byte-from-file))
+    (setq malyon-restore-data-error "quetzal file doesn't belong to game.")
+    nil))
+
+(defun malyon-restore-quetzal-cmem (size)
+  "Restore a CMem chunk from disk. Return the entire memory layout."
+  (let ((memory   (copy-sequence (aref malyon-game-state-restart 4)))
+	(max-size (+ (point) size))
+	(byte     0)
+	(i        0))
+    (while (< (point) max-size)
+      (setq byte (malyon-read-byte-from-file))
+      (if (zerop byte)
+	  (setq i (+ 1 i (malyon-read-byte-from-file)))
+	(aset memory i (logxor byte (aref memory i)))
+	(setq i (+ 1 i))))
+    memory))
+
+(defun malyon-restore-quetzal-umem (size)
+  "Restore a UMem chunk from disk. Return the entire memory layout."
+  (let ((memory (copy-sequence (aref malyon-game-state-restart 4)))
+	(i      0))
+    (while (< i size)
+      (aset memory i (malyon-read-byte-from-file))
+      (setq i (+ 1 i)))
+    memory))
+
+(defun malyon-restore-quetzal-stks (size)
+  "Restore a Stks chunk from disk. Return a vector containing the 
+stack pointer, the frame pointer, and the stack itself."
+  (let ((i 0) (frame-id 0))
+    (setq malyon-restore-quetzal-stack
+	  (copy-sequence (aref malyon-game-state-restart 3)))
+    (setq malyon-restore-quetzal-stack-pointer -1)
+    (setq malyon-restore-quetzal-frame-pointer 2)
+    (while (< i size)
+      (let* ((beginning     (point))
+	     (return3       (malyon-read-byte-from-file))
+	     (return2       (malyon-read-byte-from-file))
+	     (return1       (malyon-read-byte-from-file))
+	     (return-addr   (logior (lsh return3 16) (lsh return2 8) return1))
+	     (result-locals (malyon-read-byte-from-file))
+	     (has-result    (not (zerop (logand 16 result-locals))))
+	     (num-locals    (logand 15 result-locals))
+	     (result-addr   (malyon-read-byte-from-file))
+	     (arg-flags     (+ 1 (malyon-read-byte-from-file)))
+	     (num-args      0)
+	     (eval-size     (malyon-read-word-from-file))
+	     (local-vars    '())
+	     (eval-stack    '()))
+	(while (> num-locals 0)
+	  (setq local-vars (cons (malyon-read-word-from-file) local-vars))
+	  (setq num-locals (- num-locals 1)))
+	(while (> eval-size 0)
+	  (setq eval-stack (cons (malyon-read-word-from-file) eval-stack))
+	  (setq eval-size (- eval-size 1)))
+	(while (> arg-flags 1)
+	  (setq arg-flags (lsh arg-flags -1))
+	  (setq num-args (+ num-args 1)))
+	(malyon-push-stack-frame frame-id
+				 return-addr
+				 (if has-result result-addr nil)
+				 (reverse local-vars)
+				 num-args
+				 (reverse eval-stack))
+	(setq frame-id (+ 1 frame-id))
+	(setq i (+ i (- (point) beginning)))))
+    (vector malyon-restore-quetzal-stack-pointer
+	    malyon-restore-quetzal-frame-pointer
+	    malyon-restore-quetzal-stack)))
 
 ;; object table management
 
@@ -1653,6 +1928,77 @@ gets the remaining lines."
 (defun malyon-return-store (where value)
   "Return from a routine storing the result."
   (malyon-store-variable where value))
+
+(defun malyon-push-initial-frame ()
+  "Push the initial stack frame required in quetzal mode."
+  (if malyon-game-state-quetzal
+      (progn
+	(malyon-push-stack 1)
+	(malyon-push-stack 0)
+	(malyon-push-stack 0)
+	(malyon-push-stack 0)
+	(malyon-push-stack 0))))
+
+(defun malyon-get-stack-frame (fp sp stack)
+  "Return a decoded stack frame in quetzal mode.
+The result is a vector containing the frame id, the fp of the
+previous frame, the sp of the previous frame, the return address,
+the result variable if any, a list of local variables, the number
+of arguments, and a list of the evaluation stack elements."
+  (let* ((has-result   (zerop (aref stack fp)))
+	 (result-addr  (if has-result (aref stack (+ 1 fp)) nil))
+	 (return-addr  (aref stack (+ 2 fp)))
+	 (offset       (lsh (aref stack (+ 3 fp)) -8))
+	 (num-args     (logand 255 (aref stack (+ 3 fp))))
+	 (frame-id     (lsh (aref stack (+ 4 fp)) -8))
+	 (num-locals   (logand 255 (aref stack (+ 4 fp))))
+	 (start-locals (+ 5 fp))
+	 (start-eval   (+ 5 fp num-locals))
+	 (local-vars   '())
+	 (eval-stack   '()))
+    (if (not (zerop num-locals))
+	(setq local-vars
+	      (append (substring stack start-locals start-eval) '())))
+    (if (> sp start-eval)
+	(setq eval-stack 
+	      (append (substring stack start-eval (+ 1 sp)) '())))
+    (vector frame-id
+	    (- fp offset 2)
+	    (- fp 1)
+	    return-addr
+	    result-addr
+	    local-vars
+	    num-args
+	    eval-stack)))
+
+(defsubst malyon-restore-quetzal-push-stack (value)
+  "Push a value onto the restore quetzal stack."
+  (setq malyon-restore-quetzal-stack-pointer
+	(+ malyon-restore-quetzal-stack-pointer 1))
+  (aset malyon-restore-quetzal-stack
+	malyon-restore-quetzal-stack-pointer
+	value))
+
+(defun malyon-push-stack-frame
+  (frame-id return-addr result local-vars num-args eval-stack)
+  "Pushes a new stack frame in quetzal mode."
+  (malyon-restore-quetzal-push-stack (if result 0 1))
+  (malyon-restore-quetzal-push-stack (if result result 0))
+  (malyon-restore-quetzal-push-stack return-addr)
+  (malyon-restore-quetzal-push-stack
+   (logior (lsh (- malyon-restore-quetzal-stack-pointer
+		   malyon-restore-quetzal-frame-pointer) 8)
+	   num-args))
+  (malyon-restore-quetzal-push-stack
+   (logior (lsh frame-id 8) (length local-vars)))
+  (setq malyon-restore-quetzal-frame-pointer
+	malyon-restore-quetzal-stack-pointer)
+  (while (not (null local-vars))
+    (malyon-restore-quetzal-push-stack (car local-vars))
+    (setq local-vars (cdr local-vars)))
+  (while (not (null eval-stack))
+    (malyon-restore-quetzal-push-stack (car eval-stack))
+    (setq eval-stack (cdr eval-stack))))
 
 ;; other stuff
 
@@ -2365,8 +2711,8 @@ The result is stored at encoded."
 (defun malyon-opcode-restore-undo ()
   "Restore game state for undo."
   (if malyon-game-state-undo
-      (malyon-set-game-state malyon-game-state-undo)
-    (malyon-store-variable (malyon-read-code-byte) 0)))
+      (malyon-set-game-state malyon-game-state-undo))
+  (malyon-store-variable (malyon-read-code-byte) 2))
 
 (defun malyon-opcode-ret (value)
   "Return a value."
@@ -2396,7 +2742,7 @@ The result is stored at encoded."
 (defun malyon-opcode-save-undo ()
   "Save game state for undo."
   (setq malyon-game-state-undo (malyon-current-game-state))
-  (malyon-store-byte (malyon-read-code-byte) 0))
+  (malyon-store-byte (malyon-read-code-byte) 1))
 
 (defun malyon-opcode-scan-table (x table len &optional form)
   "Scan the given table for the first occurrence of x."
