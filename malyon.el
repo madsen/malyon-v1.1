@@ -161,8 +161,7 @@ progress by typing M-x malyon-restore."
 (if (fboundp 'redisplay-frame)
     (defalias 'malyon-redisplay-frame 'redisplay-frame)
   (defun malyon-redisplay-frame (frame &rest ignore)
-    "Redisplay the given frame."
-    ))
+    "Redisplay the given frame."))
 
 (if (fboundp 'remove)
     (defalias 'malyon-remove 'remove)
@@ -181,8 +180,7 @@ progress by typing M-x malyon-restore."
 (if (fboundp 'set-keymap-name)
     (defalias 'malyon-set-keymap-name 'set-keymap-name)
   (defun malyon-set-keymap-name (keymap name)
-    "Set the name of the keymap."
-    ))
+    "Set the name of the keymap."))
 
 (if (fboundp 'string-to-list)
     (defalias 'malyon-string-to-list 'string-to-list)
@@ -243,9 +241,24 @@ progress by typing M-x malyon-restore."
   (malyon-set-keymap-name malyon-keymap-read 'malyon-keymap-read)
   (setq malyon-history-saved-up   (global-key-binding [up]))
   (setq malyon-history-saved-down (global-key-binding [down]))
-  (define-key malyon-keymap-read "\r"   'malyon-end-input)
-  (define-key malyon-keymap-read [up]   'malyon-history-previous-char)
-  (define-key malyon-keymap-read [down] 'malyon-history-next-char))
+  (define-key malyon-keymap-read "\r"        'malyon-end-input)
+  (define-key malyon-keymap-read [up]        'malyon-history-previous-char)
+  (define-key malyon-keymap-read [down]      'malyon-history-next-char)
+  (define-key malyon-keymap-read "\M-p"      'malyon-history-previous-char)
+  (define-key malyon-keymap-read "\M-n"      'malyon-history-next-char)
+  (define-key malyon-keymap-read "\C-a"      'malyon-beginning-of-line)
+  (define-key malyon-keymap-read "\C-w"      'malyon-kill-region)
+  (define-key malyon-keymap-read "\C-k"      'malyon-kill-line)
+  (define-key malyon-keymap-read "\M-d"      'malyon-kill-word)
+  (define-key malyon-keymap-read "\C-y"      'malyon-yank)
+  (define-key malyon-keymap-read "\M-y"      'malyon-yank-pop)
+  (define-key malyon-keymap-read "\C-d"      'malyon-delete-char)
+  (define-key malyon-keymap-read "\d"        'malyon-backward-delete-char)
+  (define-key malyon-keymap-read [del]       'malyon-delete-char)
+  (define-key malyon-keymap-read [backspace] 'malyon-backward-delete-char)
+  (substitute-key-definition (lookup-key (current-global-map) "a")
+			     'malyon-self-insert-command
+			     malyon-keymap-read (current-global-map)))
 
 (defvar malyon-keymap-readchar nil
   "Keymap for malyon mode for waiting for input.")
@@ -453,8 +466,8 @@ progress by typing M-x malyon-restore."
   (malyon-store-byte 30 1)
   (malyon-store-byte 31 65)
   (malyon-store-byte 32 255)
-  (malyon-store-byte 33 71)
-  (malyon-store-word 34 71)
+  (malyon-store-byte 33 (- malyon-max-column 1))
+  (malyon-store-word 34 (- malyon-max-column 1))
   (malyon-store-word 36 255)
   (malyon-store-word 38 1)
   (malyon-store-word 39 1)
@@ -494,6 +507,7 @@ progress by typing M-x malyon-restore."
 	(aset malyon-alphabet i
 	      (malyon-read-byte (+ i (malyon-read-word 52))))
 	(setq i (+ 1 i)))))
+  (malyon-initialize-unicode-table)
   (setq malyon-dictionary (malyon-read-word 8))
   (setq malyon-dictionary-entry-length
 	(malyon-read-byte
@@ -579,7 +593,7 @@ progress by typing M-x malyon-restore."
 			   'face
 			   'malyon-face-error
 			   message)
-	(insert-string message)
+	(insert message)
 	(newline))
     (malyon-cleanup)
     (malyon-redisplay-frame (selected-frame) t)
@@ -643,6 +657,90 @@ addresses.")
 				(malyon-char-to-int ?\n)
 				(malyon-char-to-int ?\r))))
 
+;; conversion of zscii to ascii
+
+(defvar malyon-unicode-table nil
+  "An array mapping zscii characters to latin-1 ones.")
+
+(defvar malyon-default-unicode-table nil
+  "The default array mapping zscii characters to latin-1 ones.")
+
+(if malyon-default-unicode-table
+    '()
+  (setq malyon-default-unicode-table
+	[#x20                                    ;   0
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00      ;   1 -   7
+	 #x08 #x00 ?\n  #x00 #x00 ?\n  #x00 #x00 ;   8 -  15
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ;  16 -  23
+	 #x00 #x00 #x00 #x27 #x00 #x00 #x00 #x00 ;  24 -  31
+	 #x20 #x21 #x22 #x23 #x24 #x25 #x26 #x27 ;  32 -  39
+	 #x28 #x29 #x2a #x2b #x2c #x2d #x2e #x2f ;  40 -  47
+	 #x30 #x31 #x32 #x33 #x34 #x35 #x36 #x37 ;  48 -  55
+	 #x38 #x39 #x3a #x3b #x3c #x3d #x3e #x3f ;  56 -  63
+	 #x40 #x41 #x42 #x43 #x44 #x45 #x46 #x47 ;  64 -  71
+	 #x48 #x49 #x4a #x4b #x4c #x4d #x4e #x4f ;  72 -  79
+	 #x50 #x51 #x52 #x53 #x54 #x55 #x56 #x57 ;  80 -  87
+	 #x58 #x59 #x5a #x5b #x5c #x5d #x5e #x5f ;  88 -  95
+	 #x60 #x61 #x62 #x63 #x64 #x65 #x66 #x67 ;  96 - 103
+	 #x68 #x69 #x6a #x6b #x6c #x6d #x6e #x6f ; 104 - 111
+	 #x70 #x71 #x72 #x73 #x74 #x75 #x76 #x77 ; 112 - 119
+	 #x78 #x79 #x7a #x7b #x7c #x7d #x7e #x00 ; 120 - 127
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 128 - 135
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 136 - 143
+	 #x00 #x30 #x31 #x32 #x33 #x34 #x35 #x36 ; 144 - 151
+	 #x37 #x38 #x39 #xe4 #xf6 #xfc #xc4 #xd6 ; 152 - 159
+	 #xdc #xdf #xbb #xab #xeb #xef #xff #xcb ; 160 - 167
+	 #xcf #xe1 #xe9 #xed #xf3 #xfa #xfd #xc1 ; 168 - 175
+	 #xc9 #xcd #xd3 #xda #xdd #xe0 #xe8 #xec ; 176 - 183
+	 #xf2 #xf9 #xc0 #xc8 #xcc #xd2 #xd9 #xe2 ; 184 - 191
+	 #xea #xee #xf4 #xfb #xc2 #xca #xce #xd4 ; 192 - 199
+	 #xdb #xe5 #xc5 #xf8 #xd8 #xe3 #xf1 #xf5 ; 200 - 207
+	 #xc3 #xd1 #xd5 #xe6 #xc6 #xe7 #xc7 #xfe ; 208 - 215
+	 #xf0 #xde #xd0 #xa3 #x153 #x152 #xa1 #xbf ; 216 - 223
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 224 - 231
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 232 - 239
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 240 - 247
+	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 248 - 255
+	 ]))
+
+(defun malyon-initialize-unicode-table ()
+  "Initializes the zscii-to-unicode conversion table."
+  (setq malyon-unicode-table
+	(copy-sequence malyon-default-unicode-table))
+  (let* ((ext   (malyon-read-word 54))
+	 (len   (if (zerop ext) 0 (malyon-read-word ext)))
+	 (table (if (< len 3)   0 (malyon-read-word (+ ext 6)))))
+    (if (or (< malyon-story-version 5) (zerop table))
+	'()
+      (let ((i 0))
+	(while (< i 96)
+	  (aset malyon-unicode-table (+ 155 i) ??)
+	  (setq i (+ 1 i))))
+      (setq len (malyon-read-byte table))
+      (let ((i 0))
+	(while (< i len)
+	  (aset malyon-unicode-table (+ 155 i)
+		(malyon-read-word (+ table 1 i)))
+	  (setq i (+ 1 i)))))))
+
+(defsubst malyon-zscii-to-unicode (char)
+  "Converts a zscii character to unicode."
+  (if (or (< char 0) (> char 255))
+      ??
+    (let ((unicode (aref malyon-unicode-table char)))
+      (if (zerop unicode) ?? (unibyte-char-to-multibyte unicode)))))
+
+(defsubst malyon-unicode-to-zscii (char)
+  "Converts a unicode character to zscii."
+  (setq char (multibyte-char-to-unibyte char))
+  (let ((i     1)
+	(found 0))
+    (while (and (< i 255) (zerop found))
+      (if (= char (aref malyon-unicode-table i))
+	  (setq found i))
+      (setq i (+ i 1)))
+    found))
+
 ;; output streams
 
 (defvar malyon-output-streams nil
@@ -698,6 +796,7 @@ addresses.")
 
 (defsubst malyon-output-character (char)
   "Output a single character on all active streams."
+  (setq char (malyon-zscii-to-unicode char))
   (if malyon-output-streams-tables
       (malyon-putchar-table char (car malyon-output-streams-tables))
     (malyon-mapc (lambda (s) (funcall s char)) malyon-output-streams)))
@@ -810,7 +909,7 @@ addresses.")
   "Print a single character in the transcript window."
   (if (char-equal char ?\n)
       (newline 1)
-    (insert-char char 1))
+    (insert char))
   (if (and malyon-transcript-buffer-buffered
 	   (> (current-column) (current-fill-column)))
       (progn
@@ -834,7 +933,7 @@ addresses.")
 	    (forward-line -1)))
     (if (> (current-column) (current-fill-column))
 	'()
-      (insert-char char 1)
+      (insert char)
       (delete-char 1))))
 
 (defun malyon-putchar-table (char table)
@@ -1126,7 +1225,7 @@ is changed after the next turn (read or read_char).")
       (goto-char (point-max))
       (setq status (- status lines -1))
       (while (> status 0)
-	(insert-string (make-string (+ 3 malyon-max-column) ? ))
+	(insert (make-string (+ 3 malyon-max-column) ? ))
 	(newline 1)
 	(setq status (- status 1))))))
 
@@ -1884,7 +1983,7 @@ The result is stored at encoded."
 	(save-excursion
 	  (let ((i (current-column)))
 	    (while (<= i malyon-max-column)
-	      (insert-char ?  1)
+	      (insert ? )
 	      (delete-char 1)
 	      (setq i (+ 1 i))))))))
 
@@ -2422,7 +2521,8 @@ The result is stored at encoded."
 			    malyon-aread-beginning-of-line
 			  (point))
 			(point))))
-	       (text (malyon-string-to-vector input))
+	       (vec  (malyon-string-to-vector input))
+	       (text (apply 'vector (mapcar 'malyon-unicode-to-zscii vec)))
 	       (len  (min (malyon-read-byte malyon-aread-text) (length text)))
 	       (i    0))
 	  (malyon-history-insert input)
@@ -2464,8 +2564,9 @@ The result is stored at encoded."
   (interactive)
   (condition-case nil
       (progn
-	(malyon-store-variable (malyon-read-code-byte)
-			       (malyon-char-to-int last-command-char))
+	(malyon-store-variable 
+	 (malyon-read-code-byte)
+	 (malyon-char-to-int (malyon-unicode-to-zscii last-command-char)))
 	(use-local-map malyon-keymap-read)
 	(malyon-interpreter))
     (error
@@ -2482,7 +2583,7 @@ The result is stored at encoded."
 	     (set-buffer malyon-transcript-buffer)
 	     (delete-region malyon-aread-beginning-of-line (point-max)))
 	   (goto-char (point-max))
-	   (insert-string input)
+	   (insert input)
 	   (malyon-adjust-transcript)))))
 
 (defun malyon-history-next-char (arg)
@@ -2496,8 +2597,64 @@ The result is stored at encoded."
 	     (set-buffer malyon-transcript-buffer)
 	     (delete-region malyon-aread-beginning-of-line (point-max)))
 	   (goto-char (point-max))
-	   (insert-string input)
+	   (insert input)
 	   (malyon-adjust-transcript)))))
+
+(defun malyon-beginning-of-line (arg)
+  "Go to the beginning of the line."
+  (interactive "p")
+  (if (> malyon-aread-beginning-of-line (point))
+      (beginning-of-line)
+    (goto-char malyon-aread-beginning-of-line)))
+
+(defun malyon-kill-region (arg)
+  "Kill region."
+  (interactive "p")
+  (if (<= malyon-aread-beginning-of-line (point))
+      (kill-region (point) (mark))))
+
+(defun malyon-kill-line (arg)
+  "Kill rest of the current line."
+  (interactive "p")
+  (if (<= malyon-aread-beginning-of-line (point))
+      (kill-line)))
+
+(defun malyon-kill-word (arg)
+  "Kill the current word."
+  (interactive "p")
+  (if (<= malyon-aread-beginning-of-line (point))
+      (kill-word 1)))
+
+(defun malyon-yank (arg)
+  "Yank."
+  (interactive "p")
+  (if (<= malyon-aread-beginning-of-line (point))
+      (yank)))
+
+(defun malyon-yank-pop (arg)
+  "Yank pop."
+  (interactive "p")
+  (if (<= malyon-aread-beginning-of-line (point))
+      (yank-pop 1)))
+
+(defun malyon-delete-char (arg)
+  "Delete a character."
+  (interactive "p")
+  (if (<= malyon-aread-beginning-of-line (point))
+      (delete-char 1)))
+
+(defun malyon-backward-delete-char (arg)
+  "Delete a character backwards."
+  (interactive "p")
+  (if (<= malyon-aread-beginning-of-line (point))
+      (backward-delete-char-untabify 1)))
+
+(defun malyon-self-insert-command (arg)
+  "Insert a character."
+  (interactive "p")
+  (if (> malyon-aread-beginning-of-line (point))
+      (goto-char (point-max)))
+  (self-insert-command 1))
 
 ;; tracing utility
 
@@ -2510,7 +2667,7 @@ The result is stored at encoded."
 	(save-excursion
 	  (set-buffer trace)
 	  (malyon-erase-buffer)
-	  (insert-string (concat "Tracing " malyon-story-file-name "..."))
+	  (insert (concat "Tracing " malyon-story-file-name "..."))
 	  (newline)))))
   
 (defun malyon-trace-newline ()
@@ -2545,7 +2702,7 @@ The result is stored at encoded."
 	(save-excursion
 	  (set-buffer trace)
 	  (goto-char (point-max))
-	  (insert-string s)))))
+	  (insert s)))))
 
 (defun malyon-trace-object (o)
   "Output tracing object."
