@@ -1,14 +1,14 @@
-; malyon-mode.el --- mode to execute z code files version 3, 5, 8
+; malyon.el --- mode to execute z code files version 3, 5, 8
 
-;; Copyright (C) 1999-2002 Peter Ilberg
+;; Copyright (C) 1999-2003 Peter Ilberg
 
 ;; Maintainer: Peter Ilberg <peter.ilberg@ni.com>
 
 ;; Credits:
-;;   Alberto Petrofsky <Alberto@petrofsky.berkeley.ca.us> enabled
-;;       support for z8 games.
-;;   Alan Shutko <ats@acm.org> suggested various improvements to
-;;       the elisp code.
+;;   The author would like to thank the following people for suggesting
+;;   and/or contributing improvements to the code:
+;;     Alberto Petrofsky <Alberto@petrofsky.berkeley.ca.us>
+;;     Alan Shutko       <ats@acm.org>
 
 ;;; Commentary:
 
@@ -23,6 +23,29 @@
 ;; story file. If anything goes wrong and you want to manually clean
 ;; up type M-x malyon-quit. In addition, you can switch back to a game in
 ;; progress by typing M-x malyon-restore.
+
+;; A note on the format of saved game states:
+
+;; As of version 1.0, Malyon supports the quetzal file format for saved 
+;; games. Support for this format required changes to several internal
+;; data structures (stack frames and catch-throw) that are incompatible
+;; with the old implementation. Unfortunately, the old file format for
+;; saved games cannot be converted into quetzal.
+
+;; For backwards compatibility, however, Malyon still supports the old
+;; file format. And you can continue to play your old game states.
+
+;; Because of the incompatibility of the two file formats, Malyon now 
+;; runs, as follows, in either of two modes: quetzal and compatibility.
+
+;; - in quetzal mode, game states are saved in quetzal format
+;; - in compatibility mode, games states are saved in the old format
+;; - loading a game state in quetzal format switches to quetzal mode
+;; - loading an old game state switches to compatibility mode
+;; - quetzal mode is the default setting
+
+;; In other words, Malyon will only use the old file format if you've
+;; restored a game state saved in the old file format.
 
 ;; Enjoy!
 
@@ -83,7 +106,12 @@ peter.ilberg@natinst.com. Thank you!
 To play a story file simple type M-x malyon and enter the path to the
 story file. If anything goes wrong and you want to manually clean
 up type M-x malyon-quit. In addition, you can switch back to a game in
-progress by typing M-x malyon-restore."
+progress by typing M-x malyon-restore.
+
+The author would like to thank the following people for suggesting
+and/or contributing improvements to the code:
+    Alberto Petrofsky <Alberto@petrofsky.berkeley.ca.us>
+    Alan Shutko       <ats@acm.org>"
   (message "Use M-x malyon if you want to play a zcode game."))
 
 ;; compatibility functions for GNU emacs
@@ -416,6 +444,7 @@ progress by typing M-x malyon-restore."
 (defun malyon-initialize ()
   "Initialize the z code interpreter."
 ;  (malyon-trace-file)
+  (setq malyon-game-state-quetzal nil) ; TODO disabled for testing
   (malyon-initialize-faces)
   (malyon-initialize-status)
   (malyon-initialize-transcript)
@@ -489,7 +518,8 @@ progress by typing M-x malyon-restore."
   "Initialize the interpreter's internal registers."
   (setq malyon-stack (make-vector 1024 0))
   (setq malyon-stack-pointer -1)
-  (setq malyon-frame-pointer -1)
+  (if malyon-game-state-quetzal (malyon-push-stack 0))
+  (setq malyon-frame-pointer malyon-stack-pointer)
   (setq malyon-instruction-pointer (malyon-read-word 6))
   (setq malyon-global-variables (malyon-read-word 12))
   (setq malyon-object-table (malyon-read-word 10))
@@ -549,18 +579,12 @@ progress by typing M-x malyon-restore."
 (defun malyon-print-header ()
   "Print malyon mode header information."
   (malyon-opcode-set-text-style 2)
-  (malyon-print "Malyon V 0.7")
+  (malyon-print "Malyon V 1.0")
   (malyon-opcode-set-text-style 0)
   (malyon-newline)
   (malyon-print "A z-code interpreter for version 3, 5, and 8 games.")
   (malyon-newline)
-  (malyon-print "(c) 1999-2002 by Peter Ilberg <peter.ilberg@ni.com>")
-  (malyon-newline)
-  (malyon-print "Alberto Petrofsky <Alberto@petrofsky.berkeley.ca.us>")
-  (malyon-print " enabled support for z8 games.")
-  (malyon-newline)
-  (malyon-print "Alan Shutko <ats@acm.org> suggested various")
-  (malyon-print " improvements to the elisp code.")
+  (malyon-print "(c) 1999-2003 by Peter Ilberg <peter.ilberg@ni.com>")
   (malyon-newline)
   (malyon-newline))
 
@@ -1280,6 +1304,9 @@ gets the remaining lines."
 
 ;; getting and setting the machine state
 
+(defvar malyon-game-state-quetzal t
+  "Store game state information for quetzal.")
+
 (defvar malyon-game-state-restart nil
   "The machine state for implementing restart.")
 
@@ -1292,7 +1319,8 @@ gets the remaining lines."
 	  malyon-stack-pointer
           malyon-frame-pointer
 	  (copy-sequence malyon-stack)
-	  (copy-sequence malyon-story-file)))
+	  (copy-sequence malyon-story-file)
+	  malyon-game-state-quetzal))
 
 (defun malyon-set-game-state (state)
   "Installs the given state as the new state of the interpreter."
@@ -1300,7 +1328,8 @@ gets the remaining lines."
   (setq malyon-stack-pointer             (aref state 1))
   (setq malyon-frame-pointer             (aref state 2))
   (setq malyon-stack (copy-sequence      (aref state 3)))
-  (setq malyon-story-file (copy-sequence (aref state 4))))
+  (setq malyon-story-file (copy-sequence (aref state 4)))
+  (setq malyon-game-state-quetzal        (aref state 5)))
 
 ;; file utilities
 
@@ -1461,7 +1490,7 @@ gets the remaining lines."
       (aset mem i (malyon-read-byte-from-file))
       (setq i (+ 1 i)))
     (if (string= name malyon-story-file-name)
-	(malyon-set-game-state (vector ip sp fp stack mem))
+	(malyon-set-game-state (vector ip sp fp stack mem nil))
       (message "Invalid save file."))))
 
 ;; object table management
@@ -1574,10 +1603,12 @@ gets the remaining lines."
     (malyon-push-stack
      (logior (lsh (- malyon-stack-pointer malyon-frame-pointer) 8)
 	     (length arguments)))
-    (setq malyon-frame-pointer malyon-stack-pointer)
     (setq malyon-instruction-pointer (* malyon-packed-multiplier routine))
-    (let ((args (malyon-read-code-byte))
-	  (value nil))
+    (let ((args (malyon-read-code-byte)) (value nil))
+      (if malyon-game-state-quetzal
+	  (let ((id (lsh (aref malyon-stack malyon-frame-pointer) -8)))
+	    (malyon-push-stack (logior (lsh (+ 1 id) 8) args))))
+      (setq malyon-frame-pointer malyon-stack-pointer)
       (while (> args 0)
 	(setq value (if (< malyon-story-version 5) (malyon-read-code-word) 0))
 	(malyon-push-stack (if (null arguments) value (car arguments)))
@@ -1606,6 +1637,7 @@ gets the remaining lines."
 (defun malyon-return (value)
   "Return from a routine."
   (setq malyon-stack-pointer malyon-frame-pointer)
+  (if malyon-game-state-quetzal (malyon-pop-stack))
   (setq malyon-frame-pointer
 	(- malyon-stack-pointer 1 (lsh (malyon-pop-stack) -8)))
   (setq malyon-instruction-pointer (malyon-pop-stack))
@@ -1920,12 +1952,19 @@ Repeat ad infinitum."
 
 (defun malyon-opcode-catch ()
   "Return the current stack frame."
-  (malyon-store-variable (malyon-read-code-byte) malyon-frame-pointer))
+  (malyon-store-variable
+   (malyon-read-code-byte)
+   (if malyon-game-state-quetzal
+       (lsh (aref malyon-stack malyon-frame-pointer) -8)
+     malyon-frame-pointer)))
 
 (defun malyon-opcode-check-arg-count (count)
   "Tests the number of arguments passed to routine."
   (malyon-jump-if
-   (<= count (logand 255 (aref malyon-stack malyon-frame-pointer)))))
+   (<= count (logand 255 (aref malyon-stack 
+			       (if malyon-game-state-quetzal
+				   (- malyon-frame-pointer 1)
+				 malyon-frame-pointer))))))
 
 (defun malyon-opcode-check-unicode (char)
   "Check whether the given character is valid for input/output."
@@ -2483,7 +2522,17 @@ The result is stored at encoded."
 
 (defun malyon-opcode-throw (value frame)
   "Return from the given stack frame."
-  (setq malyon-frame-pointer frame)
+  (if malyon-game-state-quetzal
+      (let ((id (lsh (aref malyon-stack malyon-frame-pointer) -8)))
+	(while (/= frame id)
+	  (setq malyon-stack-pointer malyon-frame-pointer)
+	  (malyon-pop-stack)
+	  (setq malyon-frame-pointer
+		(- malyon-stack-pointer 1 (lsh (malyon-pop-stack) -8)))
+	  (malyon-pop-stack)
+	  (malyon-pop-stack)
+	  (setq id (lsh (aref malyon-stack malyon-frame-pointer) -8))))
+    (setq malyon-frame-pointer frame))
   (malyon-return value))
 
 (defun malyon-opcode-tokenise (text parse &optional dict flag)
@@ -2626,43 +2675,50 @@ The result is stored at encoded."
   "Kill region."
   (interactive "p")
   (if (<= malyon-aread-beginning-of-line (point))
-      (kill-region (point) (mark))))
+      (kill-region (point) (mark))
+    (message "Editing is restricted to the input prompt.")))
 
 (defun malyon-kill-line (arg)
   "Kill rest of the current line."
   (interactive "p")
   (if (<= malyon-aread-beginning-of-line (point))
-      (kill-line)))
+      (kill-line)
+    (message "Editing is restricted to the input prompt.")))
 
 (defun malyon-kill-word (arg)
   "Kill the current word."
   (interactive "p")
   (if (<= malyon-aread-beginning-of-line (point))
-      (kill-word 1)))
+      (kill-word 1)
+    (message "Editing is restricted to the input prompt.")))
 
 (defun malyon-yank (arg)
   "Yank."
   (interactive "p")
   (if (<= malyon-aread-beginning-of-line (point))
-      (yank)))
+      (yank)
+    (message "Editing is restricted to the input prompt.")))
 
 (defun malyon-yank-pop (arg)
   "Yank pop."
   (interactive "p")
   (if (<= malyon-aread-beginning-of-line (point))
-      (yank-pop 1)))
+      (yank-pop 1)
+    (message "Editing is restricted to the input prompt.")))
 
 (defun malyon-delete-char (arg)
   "Delete a character."
   (interactive "p")
   (if (<= malyon-aread-beginning-of-line (point))
-      (delete-char 1)))
+      (delete-char 1)
+    (message "Editing is restricted to the input prompt.")))
 
 (defun malyon-backward-delete-char (arg)
   "Delete a character backwards."
   (interactive "p")
-  (if (<= malyon-aread-beginning-of-line (point))
-      (backward-delete-char-untabify 1)))
+  (if (< malyon-aread-beginning-of-line (point))
+      (backward-delete-char-untabify 1)
+    (message "Editing is restricted to the input prompt.")))
 
 (defun malyon-self-insert-command (arg)
   "Insert a character."
