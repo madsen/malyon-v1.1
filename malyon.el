@@ -988,7 +988,7 @@ and/or contributing improvements to the code:
 	 #xea #xee #xf4 #xfb #xc2 #xca #xce #xd4 ; 192 - 199
 	 #xdb #xe5 #xc5 #xf8 #xd8 #xe3 #xf1 #xf5 ; 200 - 207
 	 #xc3 #xd1 #xd5 #xe6 #xc6 #xe7 #xc7 #xfe ; 208 - 215
-	 #xf0 #xde #xd0 #xa3 #x153 #x152 #xa1 #xbf ; 216 - 223
+	 #xf0 #xde #xd0 #xa3 #x3f #x3f #xa1 #xbf ; 216 - 223
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 224 - 231
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 232 - 239
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 240 - 247
@@ -1495,16 +1495,11 @@ and/or contributing improvements to the code:
       (if (zerop lines)
 	  (newline 1))
       (goto-char (point-max))
-      (let ((init (- status lines -1)))
-	(while (> init 0)
-	  (insert (make-string (+ 3 malyon-max-column) ? ))
-	  (newline 1)
-	  (setq init (- init 1))))
-      (goto-char (point-min))
-      (forward-line (+ status 1))
-      (kill-line)
-      (insert (make-string (+ 3 malyon-max-column) ? ))
-      (newline 1))))
+     (setq status (- status lines -1))
+     (while (> status 0)
+	(insert (make-string (+ 3 malyon-max-column) ? ))
+	(newline 1)
+	(setq status (- status 1))))))
 
 (defun malyon-restore-window-configuration ()
   "Restore the saved window configuration."
@@ -1558,7 +1553,12 @@ gets the remaining lines."
   (setq malyon-frame-pointer             (aref state 2))
   (setq malyon-stack (copy-sequence      (aref state 3)))
   (setq malyon-story-file (copy-sequence (aref state 4)))
-  (setq malyon-game-state-quetzal        (aref state 5)))
+  (setq malyon-game-state-quetzal        (aref state 5))
+  (save-excursion
+    (malyon-erase-buffer malyon-status-buffer)
+    (malyon-split-buffer-windows 0)
+    (setq malyon-last-cursor-position-after-input
+	  (malyon-point-max malyon-transcript-buffer))))
 
 ;; file utilities
 
@@ -2725,8 +2725,7 @@ The result is stored at encoded."
 
 (defun malyon-opcode-restart ()
   "Restart the game."
-  (malyon-set-game-state malyon-game-state-restart)
-  (malyon-opcode-erase-window -1))
+  (malyon-set-game-state malyon-game-state-restart))
 
 (defun malyon-opcode-restore (&optional table bytes name)
   "Restore a saved game state or a section of memory from a file."
