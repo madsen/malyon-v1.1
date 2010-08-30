@@ -1,6 +1,6 @@
 ; malyon.el --- mode to execute z code files version 3, 5, 8
 
-;; Copyright (C) 1999-2003 Peter Ilberg
+;; Copyright (C) 1999-2006 Peter Ilberg
 
 ;; Maintainer: Peter Ilberg <peter.ilberg@ni.com>
 
@@ -240,10 +240,9 @@ story file. If anything goes wrong and you want to manually clean
 up type M-x malyon-quit. In addition, you can switch back to a game in
 progress by typing M-x malyon-restore.
 
-The author would like to thank the following people for suggesting
-and/or contributing improvements to the code:
-    Alberto Petrofsky <Alberto@petrofsky.berkeley.ca.us>
-    Alan Shutko       <ats@acm.org>"
+The author would like to thank the following people for reporting
+bugs, testing, suggesting and/or contributing improvements:
+    Bernhard Barde, Jonathan Craven, Alberto Petrofsky, Alan Shutko"
   (message "Use M-x malyon if you want to play a zcode game."))
 
 ;; compatibility functions for GNU emacs
@@ -904,12 +903,12 @@ and/or contributing improvements to the code:
 (defun malyon-print-header ()
   "Print malyon mode header information."
   (malyon-opcode-set-text-style 2)
-  (malyon-print "Malyon V 1.0")
+  (malyon-print "Malyon V 1.0.1")
   (malyon-opcode-set-text-style 0)
   (malyon-newline)
   (malyon-print "A z-code interpreter for version 3, 5, and 8 games.")
   (malyon-newline)
-  (malyon-print "(c) 1999-2003 by Peter Ilberg <peter.ilberg@ni.com>")
+  (malyon-print "(c) 1999-2006 by Peter Ilberg <peter.ilberg@ni.com>")
   (malyon-newline)
   (malyon-newline))
 
