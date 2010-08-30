@@ -596,6 +596,7 @@ bugs, testing, suggesting and/or contributing improvements:
 
 (defsubst malyon-store-variable (var value)
   "Store the value in a variable."
+  (setq value (logand 65535 value))
   (cond ((= var 0)  (malyon-push-stack value))
 	((< var 16) (malyon-store-local-variable var value))
 	(t          (malyon-store-global-variable (- var 16) value))))
@@ -2740,12 +2741,13 @@ The result is stored at encoded."
 			     0
 			   (+ 1 (random (malyon-number limit))))))
 
-(defun malyon-opcode-read-char (device &rest ignore)
+(defun malyon-opcode-read-char (&optional device &rest ignore)
   "Read a character."
-  (if (/= 1 device)
+  (if (and device (/= 1 device))
       (malyon-fatal-error "illegal device specified in read_char."))
   (if (eq malyon-transcript-buffer (current-buffer))
       (goto-char (point-max)))
+  (message "[Press a key.]")
   (malyon-more malyon-keymap-readchar)
   (throw 'malyon-end-of-interpreter-loop 'malyon-waiting-for-character))
 
