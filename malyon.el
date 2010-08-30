@@ -7,8 +7,7 @@
 ;; Credits:
 ;;   The author would like to thank the following people for reporting
 ;;   bugs, testing, suggesting and/or contributing improvements:
-;;     Alberto Petrofsky <Alberto@petrofsky.berkeley.ca.us>
-;;     Alan Shutko       <ats@acm.org>
+;;     Bernhard Barde, Jonathan Craven, Alberto Petrofsky, Alan Shutko
 
 ;;; Commentary:
 
@@ -2098,7 +2097,7 @@ stack pointer, the frame pointer, and the stack itself."
 (defun malyon-call-routine (routine arguments &optional result)
   "Call a routine with the given arguments and return its result."
   (if (= routine 0)
-      0
+      (if result (malyon-store-variable result 0) 0)
     (malyon-push-stack (if result 0 1))
     (malyon-push-stack (if result result 0))
     (malyon-push-stack malyon-instruction-pointer)
@@ -2337,8 +2336,8 @@ Repeat ad infinitum."
   (setq malyon-aread-beginning-of-line (point))
   (if (> 3 (malyon-read-byte text))
       (malyon-fatal-error "text buffer less than 3 bytes."))
-  (if (and (not (zerop parse)) (> 6 (malyon-read-byte parse)))
-      (malyon-fatal-error "parse buffer less than 6 bytes."))
+  (if (and (not (zerop parse)) (> 2 (malyon-read-byte parse)))
+      (malyon-fatal-error "parse buffer less than 2 bytes."))
   (malyon-more malyon-keymap-read)
   (throw 'malyon-end-of-interpreter-loop 'malyon-waiting-for-input))
 
