@@ -292,7 +292,7 @@ and/or contributing improvements to the code:
   "Erase the given buffer."
   (save-excursion
     (if buffer (set-buffer buffer))
-    (if (eq buffer malyon-transcript-buffer)
+    (if (and buffer (eq buffer malyon-transcript-buffer))
 	(malyon-begin-section)
       (erase-buffer))))
 
@@ -507,9 +507,9 @@ and/or contributing improvements to the code:
   "Print a section divider and begin a new section."
   (if malyon-print-separator
       (progn
-	(mapc 'malyon-putchar-transcript '(?\n ?\n ?* ?  ?* ?  ?*))
+	(malyon-mapc 'malyon-putchar-transcript '(?\n ?\n ?* ?  ?* ?  ?*))
 	(center-line)
-	(mapc 'malyon-putchar-transcript '(?\n ?\n))
+	(malyon-mapc 'malyon-putchar-transcript '(?\n ?\n))
 	(setq malyon-print-separator nil)))
   (narrow-to-region (point-max) (point-max)))
 
@@ -970,39 +970,39 @@ and/or contributing improvements to the code:
 (if malyon-default-unicode-table
     '()
   (setq malyon-default-unicode-table
-	[#x20                                    ;   0
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00      ;   1 -   7
-	 #x08 #x00 #x00 #x00 #x00 #x0a #x00 #x00 ;   8 -  15
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ;  16 -  23
-	 #x00 #x00 #x00 #x27 #x00 #x00 #x00 #x00 ;  24 -  31
-	 #x20 #x21 #x22 #x23 #x24 #x25 #x26 #x27 ;  32 -  39
-	 #x28 #x29 #x2a #x2b #x2c #x2d #x2e #x2f ;  40 -  47
-	 #x30 #x31 #x32 #x33 #x34 #x35 #x36 #x37 ;  48 -  55
-	 #x38 #x39 #x3a #x3b #x3c #x3d #x3e #x3f ;  56 -  63
-	 #x40 #x41 #x42 #x43 #x44 #x45 #x46 #x47 ;  64 -  71
-	 #x48 #x49 #x4a #x4b #x4c #x4d #x4e #x4f ;  72 -  79
-	 #x50 #x51 #x52 #x53 #x54 #x55 #x56 #x57 ;  80 -  87
-	 #x58 #x59 #x5a #x5b #x5c #x5d #x5e #x5f ;  88 -  95
-	 #x60 #x61 #x62 #x63 #x64 #x65 #x66 #x67 ;  96 - 103
-	 #x68 #x69 #x6a #x6b #x6c #x6d #x6e #x6f ; 104 - 111
-	 #x70 #x71 #x72 #x73 #x74 #x75 #x76 #x77 ; 112 - 119
-	 #x78 #x79 #x7a #x7b #x7c #x7d #x7e #x00 ; 120 - 127
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 128 - 135
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 136 - 143
-	 #x00 #x30 #x31 #x32 #x33 #x34 #x35 #x36 ; 144 - 151
-	 #x37 #x38 #x39 #xe4 #xf6 #xfc #xc4 #xd6 ; 152 - 159
-	 #xdc #xdf #xbb #xab #xeb #xef #xff #xcb ; 160 - 167
-	 #xcf #xe1 #xe9 #xed #xf3 #xfa #xfd #xc1 ; 168 - 175
-	 #xc9 #xcd #xd3 #xda #xdd #xe0 #xe8 #xec ; 176 - 183
-	 #xf2 #xf9 #xc0 #xc8 #xcc #xd2 #xd9 #xe2 ; 184 - 191
-	 #xea #xee #xf4 #xfb #xc2 #xca #xce #xd4 ; 192 - 199
-	 #xdb #xe5 #xc5 #xf8 #xd8 #xe3 #xf1 #xf5 ; 200 - 207
-	 #xc3 #xd1 #xd5 #xe6 #xc6 #xe7 #xc7 #xfe ; 208 - 215
-	 #xf0 #xde #xd0 #xa3 #x3f #x3f #xa1 #xbf ; 216 - 223
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 224 - 231
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 232 - 239
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 240 - 247
-	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ; 248 - 255
+	[32 
+	 0   0   0   0   0   0   0       ;   1 -   7
+	 8   0   0   0   0   10  0   0   ;   8 -  15
+	 0   0   0   0   0   0   0   0   ;  16 -  23
+	 0   0   0   39  0   0   0   0   ;  24 -  31
+	 32  33  34  35  36  37  38  39  ;  32 -  39
+	 40  41  42  43  44  45  46  47  ;  40 -  47
+	 48  49  50  51  52  53  54  55  ;  48 -  55
+	 56  57  58  59  60  61  62  63  ;  56 -  63
+	 64  65  66  67  68  69  70  71  ;  64 -  71
+	 72  73  74  75  76  77  78  79  ;  72 -  79
+	 80  81  82  83  84  85  86  87  ;  80 -  87
+	 88  89  90  91  92  93  94  95  ;  88 -  95
+	 96  97  98  99  100 101 102 103 ;  96 - 103
+	 104 105 106 107 108 109 110 111 ; 104 - 111
+	 112 113 114 115 116 117 118 119 ; 112 - 119
+	 120 121 122 123 124 125 126 0   ; 120 - 127
+	 0   0   0   0   0   0   0   0   ; 128 - 135
+	 0   0   0   0   0   0   0   0   ; 136 - 143
+	 0   48  49  50  51  52  53  54  ; 144 - 151
+	 55  56  57  228 246 252 196 214 ; 152 - 159
+	 220 223 187 171 235 239 255 203 ; 160 - 167
+	 207 225 233 237 243 250 253 193 ; 168 - 175
+	 201 205 211 218 221 224 232 236 ; 176 - 183
+	 242 249 192 200 204 210 217 226 ; 184 - 191
+	 234 238 244 251 194 202 206 212 ; 192 - 199
+	 219 229 197 248 216 227 241 245 ; 200 - 207
+	 195 209 213 230 198 231 199 254 ; 208 - 215
+	 240 222 208 163 63  63  161 191 ; 216 - 223
+	 0   0   0   0   0   0   0   0   ; 224 - 231
+	 0   0   0   0   0   0   0   0   ; 232 - 239
+	 0   0   0   0   0   0   0   0   ; 240 - 247
+	 0   0   0   0   0   0   0   0   ; 248 - 255
 	 ]))
 
 (defun malyon-initialize-unicode-table ()
@@ -1038,7 +1038,7 @@ and/or contributing improvements to the code:
   "Converts a unicode character to zscii."
   (setq char (malyon-multibyte-char-to-unibyte char))
   (setq char (if (malyon-characterp char) (malyon-char-to-int char) char))
-  (if (= #x0d char)
+  (if (= 13 char)
       ?\r
     (let ((i 1) (found 0))
       (while (and (< i 255) (zerop found))
