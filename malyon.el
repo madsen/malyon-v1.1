@@ -1557,7 +1557,7 @@ gets the remaining lines."
   (setq malyon-status-buffer-lines status)
   (setq malyon-status-buffer-delayed-split nil)
   (if (zerop status)
-	'()
+      '()
     (split-window (get-buffer-window (current-buffer)) (+ status 3))
     (switch-to-buffer malyon-status-buffer)
     (malyon-prepare-status-buffer status)
@@ -2810,15 +2810,17 @@ The result is stored at encoded."
   (let ((inc (logand 127 form))
 	(byte (zerop (logand 128 form)))
 	(addr table)
-	(found 0))
-    (while (and (zerop found) (< addr (+ table len)))
+	(found 0)
+	(index 0))
+    (while (and (zerop found) (< index len))
       (setq found
 	    (if byte
 		(if (= x (malyon-read-byte addr)) addr 0)
 	      (if (= x (malyon-read-word addr)) addr 0)))
-      (setq addr (+ addr inc)))
+      (setq addr (+ addr inc))
+      (setq index (+ index 1)))
     (malyon-store-variable (malyon-read-code-byte) found)
-    (malyon-jump-if (not (zerop found)))))	
+    (malyon-jump-if (not (zerop found)))))
 
 (defun malyon-opcode-set-attr (object attribute)
   "Set the given attribute in the given object."
@@ -2831,7 +2833,7 @@ The result is stored at encoded."
 (defun malyon-opcode-set-color (foreground background)
   "Sets the fore- and background colors ie. does nothing.")
 
-(defun malyon-opcode-set-cursor (line column)
+(defun malyon-opcode-set-cursor (&optional line column)
   "Set the cursor."
   (if (eq malyon-transcript-buffer (current-buffer))
       (goto-char (point-max))
@@ -2839,6 +2841,8 @@ The result is stored at encoded."
 	(progn
 	  (malyon-split-buffer-windows malyon-status-buffer-delayed-split)
 	  (other-window 1)))
+    (if line   '() (setq line   (count-lines (point-min) (point))))
+    (if column '() (setq column (current-column)))
     (if (> line malyon-status-buffer-lines)
 	(progn
 	  (malyon-split-buffer-windows line)
