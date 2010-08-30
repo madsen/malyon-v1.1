@@ -3023,16 +3023,14 @@ The result is stored at encoded."
   "Page down in More mode."
   (interactive)
   (condition-case nil
-      (progn
-	(scroll-up)
-	(if (>= (count-lines (point) (point-max))
-		(malyon-window-displayed-height))
-	    (message "[More]")
-	  (goto-char (point-max))
-	  (malyon-adjust-transcript)
-	  (use-local-map malyon-more-continue-keymap)))
-    (error
-     (malyon-fatal-error "more mode failed."))))
+      (scroll-up)
+    (error))
+  (if (>= (count-lines (point) (point-max))
+          (malyon-window-displayed-height))
+      (message "[More]")
+    (goto-char (point-max))
+    (malyon-adjust-transcript)
+    (use-local-map malyon-more-continue-keymap)))
 
 (defun malyon-more-char-status ()
   "Wait for a key then continue."
