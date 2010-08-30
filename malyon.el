@@ -51,6 +51,140 @@
 
 ;;; Code:
 
+;; global variables - moved here to appease the byte-code compiler
+
+;; story file information
+
+(defvar malyon-story-file-name nil
+  "The name of the story file being executed.")
+
+(defvar malyon-story-file nil
+  "The story file which is currently being run.")
+
+(defvar malyon-story-version nil
+  "The story file version.")
+
+(defvar malyon-supported-versions '(3 5 8)
+  "A list of supported story file versions.")
+
+;; status and transcript buffers
+
+(defvar malyon-transcript-buffer nil
+  "The main transcript buffer of the story file execution.")
+
+(defvar malyon-transcript-buffer-buffered nil
+  "Is output in the transcript buffer buffered?")
+
+(defvar malyon-status-buffer nil
+  "The status bar buffer of the story file execution.")
+
+(defvar malyon-status-buffer-lines nil
+  "The number of lines in the status bar buffer.")
+
+(defvar malyon-status-buffer-delayed-split nil
+  "If the number of lines in the status buffer is reduced,
+the window configuration is not changed immediately. It
+is changed after the next turn (read or read_char).")
+
+(defvar malyon-status-buffer-point nil
+  "The point location in the status bar buffer.")
+
+(defvar malyon-max-column 72
+  "Maximum column for text display.")
+
+;; window management
+
+(defvar malyon-window-configuration nil
+  "The current window configuration of the malyon interpreter.")
+
+(defvar malyon-current-window nil
+  "The currently active window for text output.")
+
+;; z machine registers
+
+(defvar malyon-stack nil
+  "The stack of the z machine.")
+
+(defvar malyon-stack-pointer nil
+  "The stack pointer of the z machine.")
+
+(defvar malyon-frame-pointer nil
+  "The frame pointer of the z machine.")
+
+(defvar malyon-instruction-pointer nil
+  "The instruction pointer of the z machine.")
+
+;; game file related global variables
+
+(defvar malyon-score-game nil
+  "A flag indicating whether this story uses score or time.")
+
+(defvar malyon-packed-multiplier nil
+  "The amount by which packed addresses are multiplied to get byte
+addresses.")
+
+(defvar malyon-global-variables nil
+  "A pointer to the global variable section in the story file.")
+
+(defvar malyon-abbreviations nil
+  "A pointer to the abbreviations in the story file.")
+
+(defvar malyon-alphabet nil
+  "The z machine's text alphabet.")
+
+(defvar malyon-whitespace nil
+  "A string of whitespace characters recognized by the interpreter.")
+
+;; object tables
+
+(defvar malyon-object-table nil
+  "A pointer to the object table in the story file.")
+
+(defvar malyon-object-table-entry-size nil
+  "The size of one entry in the object table.")
+
+(defvar malyon-object-properties nil
+  "The number of properties per object minus one.")
+
+(defvar malyon-object-property-offset nil
+  "The byte offset of the properties table in the object.")
+
+;; dictionaries
+
+(defvar malyon-dictionary nil
+  "A pointer to the dictionary of the story file.")
+
+(defvar malyon-dictionary-entry-length nil
+  "The length of a dictionary entry.")
+
+(defvar malyon-dictionary-num-entries nil
+  "The number of dictionary entries.")
+
+(defvar malyon-dictionary-entries nil
+  "A pointer to the first dictionary entry.")
+
+(defvar malyon-dictionary-word-length nil
+  "The length of a dictionary word.")
+
+;; game state information
+
+(defvar malyon-game-state-restart nil
+  "The machine state for implementing restart.")
+
+(defvar malyon-game-state-undo nil
+  "The machine state for implementing undo.")
+
+(defvar malyon-game-state-quetzal t
+  "Store game state information for quetzal.")
+
+;; various
+
+(defvar malyon-current-face nil
+  "The current face in which to display text.")
+
+(defvar malyon-last-cursor-position-after-input nil
+  "The last cursor position after reading input from the keyboard.")
+
 ;; interactive functions
 
 (defun malyon (file-name)
@@ -65,7 +199,7 @@ This mode allows execution of version 3, 5, 8 z code story files."
 	  (malyon-load-story-file file-name)
 	(error
 	 (malyon-fatal-error "loading of story file failed.")))
-      (setq malyon-story-version (malyon-read-byte 0))
+      (setq malyon-story-version (aref malyon-story-file 0))
       (cond ((memq malyon-story-version malyon-supported-versions)
 	     (condition-case nil
 		 (malyon-initialize)
@@ -250,6 +384,14 @@ and/or contributing improvements to the code:
     "Convert a unibyte character to multibyte."
     char))
 
+(defun malyon-vector-to-list (v begin end)
+  "Return a list of elements in v in the range [begin, end)."
+  (let ((result '()))
+    (while (< begin end)
+      (setq result (cons (aref v begin) result))
+      (setq begin (+ 1 begin)))
+    result))
+
 (if (fboundp 'window-displayed-height)
     (defalias 'malyon-window-displayed-height 'window-displayed-height)
   (defun malyon-window-displayed-height (&optional window)
@@ -361,6 +503,13 @@ and/or contributing improvements to the code:
 	(setq malyon-print-separator nil)))
   (narrow-to-region (point-max) (point-max)))
 
+(if malyon-whitespace
+    '()
+  (setq malyon-whitespace (list (malyon-char-to-int ? )
+				(malyon-char-to-int ?\t)
+				(malyon-char-to-int ?\n)
+				(malyon-char-to-int ?\r))))
+
 ;; memory utilities
 
 (defsubst malyon-read-byte (address)
@@ -442,6 +591,148 @@ and/or contributing improvements to the code:
 	((< var 16) (malyon-store-local-variable var value))
 	(t          (malyon-store-global-variable (- var 16) value))))
 
+;; list of opcodes
+
+(defvar malyon-opcodes
+  [malyon-opcode-nop
+   malyon-opcode-je	         malyon-opcode-jl
+   malyon-opcode-jg              malyon-opcode-dec-chk
+   malyon-opcode-inc-chk         malyon-opcode-jin
+   malyon-opcode-test            malyon-opcode-or
+   malyon-opcode-and             malyon-opcode-test-attr
+   malyon-opcode-set-attr        malyon-opcode-clear-attr
+   malyon-opcode-store           malyon-opcode-insert-obj
+   malyon-opcode-loadw           malyon-opcode-loadb
+   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
+   malyon-opcode-get-next-prop   malyon-opcode-add
+   malyon-opcode-sub             malyon-opcode-mul
+   malyon-opcode-div             malyon-opcode-mod
+   malyon-opcode-calls           malyon-opcode-calln
+   malyon-opcode-set-color       malyon-opcode-throw
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-je              malyon-opcode-jl
+   malyon-opcode-jg              malyon-opcode-dec-chk
+   malyon-opcode-inc-chk         malyon-opcode-jin
+   malyon-opcode-test            malyon-opcode-or
+   malyon-opcode-and             malyon-opcode-test-attr
+   malyon-opcode-set-attr        malyon-opcode-clear-attr
+   malyon-opcode-store           malyon-opcode-insert-obj
+   malyon-opcode-loadw           malyon-opcode-loadb
+   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
+   malyon-opcode-get-next-prop   malyon-opcode-add
+   malyon-opcode-sub             malyon-opcode-mul
+   malyon-opcode-div             malyon-opcode-mod
+   malyon-opcode-calls           malyon-opcode-calln
+   malyon-opcode-set-color       malyon-opcode-throw
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-je              malyon-opcode-jl 
+   malyon-opcode-jg              malyon-opcode-dec-chk
+   malyon-opcode-inc-chk         malyon-opcode-jin
+   malyon-opcode-test            malyon-opcode-or
+   malyon-opcode-and             malyon-opcode-test-attr
+   malyon-opcode-set-attr        malyon-opcode-clear-attr
+   malyon-opcode-store           malyon-opcode-insert-obj
+   malyon-opcode-loadw           malyon-opcode-loadb
+   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
+   malyon-opcode-get-next-prop   malyon-opcode-add
+   malyon-opcode-sub             malyon-opcode-mul
+   malyon-opcode-div             malyon-opcode-mod
+   malyon-opcode-calls           malyon-opcode-calln
+   malyon-opcode-set-color       malyon-opcode-throw
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-je              malyon-opcode-jl
+   malyon-opcode-jg              malyon-opcode-dec-chk
+   malyon-opcode-inc-chk         malyon-opcode-jin
+   malyon-opcode-test            malyon-opcode-or
+   malyon-opcode-and             malyon-opcode-test-attr
+   malyon-opcode-set-attr        malyon-opcode-clear-attr
+   malyon-opcode-store           malyon-opcode-insert-obj
+   malyon-opcode-loadw           malyon-opcode-loadb
+   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
+   malyon-opcode-get-next-prop   malyon-opcode-add
+   malyon-opcode-sub             malyon-opcode-mul
+   malyon-opcode-div             malyon-opcode-mod
+   malyon-opcode-calls           malyon-opcode-calln
+   malyon-opcode-set-color       malyon-opcode-throw
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-nop             malyon-opcode-jz
+   malyon-opcode-get-sibling     malyon-opcode-get-child
+   malyon-opcode-get-parent      malyon-opcode-get-prop-len
+   malyon-opcode-inc             malyon-opcode-dec
+   malyon-opcode-print-addr      malyon-opcode-calls
+   malyon-opcode-remove-obj      malyon-opcode-print-obj
+   malyon-opcode-ret             malyon-opcode-jump
+   malyon-opcode-print-paddr     malyon-opcode-load
+   malyon-opcode-calln           malyon-opcode-jz
+   malyon-opcode-get-sibling     malyon-opcode-get-child
+   malyon-opcode-get-parent      malyon-opcode-get-prop-len
+   malyon-opcode-inc             malyon-opcode-dec
+   malyon-opcode-print-addr      malyon-opcode-calls
+   malyon-opcode-remove-obj      malyon-opcode-print-obj
+   malyon-opcode-ret             malyon-opcode-jump
+   malyon-opcode-print-paddr     malyon-opcode-load
+   malyon-opcode-calln           malyon-opcode-jz
+   malyon-opcode-get-sibling     malyon-opcode-get-child
+   malyon-opcode-get-parent      malyon-opcode-get-prop-len
+   malyon-opcode-inc             malyon-opcode-dec
+   malyon-opcode-print-addr      malyon-opcode-calls
+   malyon-opcode-remove-obj      malyon-opcode-print-obj
+   malyon-opcode-ret             malyon-opcode-jump
+   malyon-opcode-print-paddr     malyon-opcode-load
+   malyon-opcode-calln           malyon-opcode-rtrue
+   malyon-opcode-rfalse          malyon-opcode-print
+   malyon-opcode-print-ret       malyon-opcode-nop
+   malyon-opcode-illegal         malyon-opcode-illegal
+   malyon-opcode-restart         malyon-opcode-ret-popped
+   malyon-opcode-catch           malyon-opcode-quit
+   malyon-opcode-new-line        malyon-opcode-illegal
+   malyon-opcode-verify          malyon-opcode-illegal
+   malyon-opcode-piracy          malyon-opcode-nop
+   malyon-opcode-je              malyon-opcode-jl
+   malyon-opcode-jg              malyon-opcode-dec-chk
+   malyon-opcode-inc-chk         malyon-opcode-jin
+   malyon-opcode-test            malyon-opcode-or
+   malyon-opcode-and             malyon-opcode-test-attr
+   malyon-opcode-set-attr        malyon-opcode-clear-attr
+   malyon-opcode-store           malyon-opcode-insert-obj
+   malyon-opcode-loadw           malyon-opcode-loadb
+   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
+   malyon-opcode-get-next-prop   malyon-opcode-add
+   malyon-opcode-sub             malyon-opcode-mul
+   malyon-opcode-div             malyon-opcode-mod
+   malyon-opcode-calls           malyon-opcode-calln
+   malyon-opcode-set-color       malyon-opcode-throw
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-nop             malyon-opcode-calls
+   malyon-opcode-storew          malyon-opcode-storeb
+   malyon-opcode-put-prop        malyon-opcode-aread
+   malyon-opcode-print-char      malyon-opcode-print-num
+   malyon-opcode-random          malyon-opcode-push
+   malyon-opcode-pull            malyon-opcode-split-window
+   malyon-opcode-set-window      malyon-opcode-calls
+   malyon-opcode-erase-window    malyon-opcode-erase-line
+   malyon-opcode-set-cursor      malyon-opcode-get-cursor
+   malyon-opcode-set-text-style  malyon-opcode-buffer-mode
+   malyon-opcode-output-stream   malyon-opcode-input-stream
+   malyon-opcode-nop             malyon-opcode-read-char
+   malyon-opcode-scan-table      malyon-opcode-not
+   malyon-opcode-calln           malyon-opcode-calln
+   malyon-opcode-tokenise        malyon-opcode-encode-text
+   malyon-opcode-copy-table      malyon-opcode-print-table
+   malyon-opcode-check-arg-count malyon-opcode-save
+   malyon-opcode-restore         malyon-opcode-log-shift
+   malyon-opcode-art-shift       malyon-opcode-set-font
+   malyon-opcode-illegal         malyon-opcode-illegal
+   malyon-opcode-illegal         malyon-opcode-illegal
+   malyon-opcode-save-undo       malyon-opcode-restore-undo
+   malyon-opcode-print-unicode   malyon-opcode-check-unicode
+   malyon-opcode-nop             malyon-opcode-nop
+   malyon-opcode-nop]
+  "A vector of all known legal z code opcodes.")
+
 ;; initialization
 
 (defun malyon-load-story-file (file-name)
@@ -468,7 +759,7 @@ and/or contributing improvements to the code:
 (defun malyon-initialize ()
   "Initialize the z code interpreter."
 ;  (malyon-trace-file)
-  (malyon-initialize-quetzal)
+  (setq malyon-game-state-quetzal t)
   (malyon-initialize-faces)
   (malyon-initialize-status)
   (malyon-initialize-transcript)
@@ -658,64 +949,6 @@ and/or contributing improvements to the code:
     (malyon-redisplay-frame (selected-frame) t)
     (error message)))
 
-;; malyon game file related global variables
-
-(defvar malyon-story-file-name nil
-  "The name of the story file being executed.")
-
-(defvar malyon-story-file nil
-  "The story file which is currently being run.")
-
-(defvar malyon-story-version nil
-  "The story file version.")
-
-(defvar malyon-supported-versions '(3 5 8)
-  "A list of supported story file versions.")
-
-(defvar malyon-score-game nil
-  "A flag indicating whether this story uses score or time.")
-
-(defvar malyon-packed-multiplier nil
-  "The amount by which packed addresses are multiplied to get byte
-addresses.")
-
-(defvar malyon-global-variables nil
-  "A pointer to the global variable section in the story file.")
-
-(defvar malyon-object-table nil
-  "A pointer to the object table in the story file.")
-
-(defvar malyon-abbreviations nil
-  "A pointer to the abbreviations in the story file.")
-
-(defvar malyon-alphabet nil
-  "The z machine's text alphabet.")
-
-(defvar malyon-dictionary nil
-  "A pointer to the dictionary of the story file.")
-
-(defvar malyon-dictionary-entry-length nil
-  "The length of a dictionary entry.")
-
-(defvar malyon-dictionary-num-entries nil
-  "The number of dictionary entries.")
-
-(defvar malyon-dictionary-entries nil
-  "A pointer to the first dictionary entry.")
-
-(defvar malyon-dictionary-word-length nil
-  "The length of a dictionary word.")
-
-(defvar malyon-whitespace nil
-  "A string of whitespace characters recognized by the interpreter.")
-
-(if malyon-whitespace
-    '()
-  (setq malyon-whitespace (list (malyon-char-to-int ? )
-				(malyon-char-to-int ?\t)
-				(malyon-char-to-int ?\n)
-				(malyon-char-to-int ?\r))))
-
 ;; conversion of zscii to ascii
 
 (defvar malyon-unicode-table nil
@@ -729,7 +962,7 @@ addresses.")
   (setq malyon-default-unicode-table
 	[#x20                                    ;   0
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00      ;   1 -   7
-	 #x08 #x00 #x00 #x00 #x00 ?\n  #x00 #x00 ;   8 -  15
+	 #x08 #x00 #x00 #x00 #x00 #x0a #x00 #x00 ;   8 -  15
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ;  16 -  23
 	 #x00 #x00 #x00 #x27 #x00 #x00 #x00 #x00 ;  24 -  31
 	 #x20 #x21 #x22 #x23 #x24 #x25 #x26 #x27 ;  32 -  39
@@ -773,7 +1006,7 @@ addresses.")
 	'()
       (let ((i 0))
 	(while (< i 96)
-	  (aset malyon-unicode-table (+ 155 i) ??)
+	  (aset malyon-unicode-table (+ 155 i) (malyon-char-to-int ??))
 	  (setq i (+ 1 i))))
       (setq len (malyon-read-byte table))
       (let ((i 0))
@@ -787,21 +1020,22 @@ addresses.")
   (if (or (< char 0) (> char 255))
       ??
     (let ((uni (aref malyon-unicode-table char)))
-      (setq uni (if (malyon-characterp uni) (malyon-char-to-int uni) uni))
-      (if (zerop uni) ?? (malyon-unibyte-char-to-multibyte uni)))))
+      (if (zerop uni)
+	  ??
+	(malyon-unibyte-char-to-multibyte (malyon-int-to-char uni))))))
 
 (defsubst malyon-unicode-to-zscii (char)
   "Converts a unicode character to zscii."
   (setq char (malyon-multibyte-char-to-unibyte char))
   (setq char (if (malyon-characterp char) (malyon-char-to-int char) char))
-  (let ((i 1) (found 0))
-    (if (= (malyon-char-to-int ?\r) char)
-	(setq found 13)
+  (if (= #x0d char)
+      ?\r
+    (let ((i 1) (found 0))
       (while (and (< i 255) (zerop found))
 	(if (= char (aref malyon-unicode-table i))
 	    (setq found i))
-	(setq i (+ i 1))))
-    (malyon-int-to-char found)))
+	(setq i (+ i 1)))
+      (malyon-int-to-char found))))
 
 ;; output streams
 
@@ -864,9 +1098,6 @@ addresses.")
     (malyon-mapc (lambda (s) (funcall s char)) malyon-output-streams)))
 
 ;; printing text
-
-(defvar malyon-current-face nil
-  "The current face in which to display text.")
 
 (defsubst malyon-abbrev (abbrev x)
   "Print an abbreviation."
@@ -931,7 +1162,7 @@ addresses.")
 	((and (= shift 46) (= x 6))
 	 (malyon-print-state-new nil     -6 0 1 0))
 	((and (= shift 46) (= x 7))
-	 (malyon-print-state-new ?\n     -6 0 0 0))
+	 (malyon-print-state-new ?\r     -6 0 0 0))
 	(t
 	 (malyon-print-state-new
 	  (aref malyon-alphabet (+ shift x)) -6 0 0 0))))
@@ -1010,9 +1241,6 @@ addresses.")
   "Print a single character onto a printer."); not yet implemented
 
 ;; more
-
-(defvar malyon-last-cursor-position-after-input nil
-  "The last cursor position after reading input from the keyboard.")
 
 (defvar malyon-more-continue-keymap nil
   "The keymap with which to continue after More has finished.")
@@ -1252,26 +1480,6 @@ addresses.")
 
 ;; window management
 
-(defvar malyon-window-configuration nil
-  "The current window configuration of the malyon interpreter.")
-
-(defvar malyon-current-window nil
-  "The currently active window for text output.")
-
-(defvar malyon-transcript-buffer nil
-  "The main transcript buffer of the story file execution.")
-
-(defvar malyon-status-buffer nil
-  "The status bar buffer of the story file execution.")
-
-(defvar malyon-status-buffer-lines nil
-  "The number of lines in the status bar buffer.")
-
-(defvar malyon-status-buffer-delayed-split nil
-  "If the number of lines in the status buffer is reduced,
-the window configuration is not changed immediately. It
-is changed after the next turn (read or read_char).")
-
 (defun malyon-adjust-transcript ()
   "Adjust the position of the transcript text."
   (save-excursion
@@ -1287,11 +1495,16 @@ is changed after the next turn (read or read_char).")
       (if (zerop lines)
 	  (newline 1))
       (goto-char (point-max))
-      (setq status (- status lines -1))
-      (while (> status 0)
-	(insert (make-string (+ 3 malyon-max-column) ? ))
-	(newline 1)
-	(setq status (- status 1))))))
+      (let ((init (- status lines -1)))
+	(while (> init 0)
+	  (insert (make-string (+ 3 malyon-max-column) ? ))
+	  (newline 1)
+	  (setq init (- init 1))))
+      (goto-char (point-min))
+      (forward-line (+ status 1))
+      (kill-line)
+      (insert (make-string (+ 3 malyon-max-column) ? ))
+      (newline 1))))
 
 (defun malyon-restore-window-configuration ()
   "Restore the saved window configuration."
@@ -1328,19 +1541,6 @@ gets the remaining lines."
   (setq malyon-window-configuration (current-window-configuration)))
 
 ;; getting and setting the machine state
-
-(defvar malyon-game-state-restart nil
-  "The machine state for implementing restart.")
-
-(defvar malyon-game-state-undo nil
-  "The machine state for implementing undo.")
-
-(defvar malyon-game-state-quetzal t
-  "Store game state information for quetzal.")
-
-(defun malyon-initialize-quetzal ()
-  "Initialize quetzal mode."
-  (setq malyon-game-state-quetzal t))
 
 (defun malyon-current-game-state ()
   "Return the current state of the interpreter."
@@ -1556,8 +1756,10 @@ gets the remaining lines."
     (malyon-write-byte-to-file (lsh return-addr -16))
     (malyon-write-byte-to-file (lsh return-addr -8))
     (malyon-write-byte-to-file return-addr)
-    (malyon-write-byte-to-file (logior (if result-addr 16 0)
-				       (length local-vars)))
+    (if (zerop frame-id)
+	(malyon-write-byte-to-file 0)
+      (malyon-write-byte-to-file (logior (if result-addr 0 16)
+					 (length local-vars))))
     (malyon-write-byte-to-file (if result-addr result-addr 0))
     (malyon-write-byte-to-file (- (lsh 1 num-args) 1))
     (malyon-write-word-to-file (length eval-stack))
@@ -1739,7 +1941,7 @@ stack pointer, the frame pointer, and the stack itself."
 	     (return1       (malyon-read-byte-from-file))
 	     (return-addr   (logior (lsh return3 16) (lsh return2 8) return1))
 	     (result-locals (malyon-read-byte-from-file))
-	     (has-result    (not (zerop (logand 16 result-locals))))
+	     (has-result    (zerop (logand 16 result-locals)))
 	     (num-locals    (logand 15 result-locals))
 	     (result-addr   (malyon-read-byte-from-file))
 	     (arg-flags     (+ 1 (malyon-read-byte-from-file)))
@@ -1758,7 +1960,9 @@ stack pointer, the frame pointer, and the stack itself."
 	  (setq num-args (+ num-args 1)))
 	(malyon-push-stack-frame frame-id
 				 return-addr
-				 (if has-result result-addr nil)
+				 (if (zerop frame-id)
+				     nil
+				   (if has-result result-addr nil))
 				 (reverse local-vars)
 				 num-args
 				 (reverse eval-stack))
@@ -1769,15 +1973,6 @@ stack pointer, the frame pointer, and the stack itself."
 	    malyon-restore-quetzal-stack)))
 
 ;; object table management
-
-(defvar malyon-object-table-entry-size nil
-  "The size of one entry in the object table.")
-
-(defvar malyon-object-properties nil
-  "The number of properties per object minus one.")
-
-(defvar malyon-object-property-offset nil
-  "The byte offset of the properties table in the object.")
 
 (defsubst malyon-object-address (object)
   "Compute the address at which the object is stored."
@@ -1957,11 +2152,11 @@ of arguments, and a list of the evaluation stack elements."
 	 (local-vars   '())
 	 (eval-stack   '()))
     (if (not (zerop num-locals))
-	(setq local-vars
-	      (append (substring stack start-locals start-eval) '())))
+	(setq local-vars 
+	      (malyon-vector-to-list stack start-locals start-eval)))
     (if (> sp start-eval)
 	(setq eval-stack 
-	      (append (substring stack start-eval (+ 1 sp)) '())))
+	      (malyon-vector-to-list stack start-eval (+ 1 sp))))
     (vector frame-id
 	    (- fp offset 2)
 	    (- fp 1)
@@ -2002,15 +2197,6 @@ of arguments, and a list of the evaluation stack elements."
 
 ;; other stuff
 
-(defvar malyon-transcript-buffer-buffered nil
-  "Is output in the transcript buffer buffered?")
-
-(defvar malyon-status-buffer-point nil
-  "The point location in the status bar buffer.")
-
-(defvar malyon-max-column 72
-  "Maximum column for text display.")
-
 (defvar malyon-aread-text nil
   "Text buffer for user input.")
 
@@ -2019,20 +2205,6 @@ of arguments, and a list of the evaluation stack elements."
 
 (defvar malyon-aread-beginning-of-line nil
   "The beginning of the input line.")
-
-;; z machine registers
-
-(defvar malyon-stack nil
-  "The stack of the z machine.")
-
-(defvar malyon-stack-pointer nil
-  "The stack pointer of the z machine.")
-
-(defvar malyon-frame-pointer nil
-  "The frame pointer of the z machine.")
-
-(defvar malyon-instruction-pointer nil
-  "The instruction pointer of the z machine.")
 
 ;; execution
 
@@ -2109,148 +2281,6 @@ Repeat ad infinitum."
 			    (malyon-fetch-long opcode))))
 ;      (malyon-trace-opcode pc opcode operands)
       (apply (aref malyon-opcodes opcode) operands))))
-
-;; list of opcodes
-
-(defvar malyon-opcodes
-  [malyon-opcode-nop
-   malyon-opcode-je	         malyon-opcode-jl
-   malyon-opcode-jg              malyon-opcode-dec-chk
-   malyon-opcode-inc-chk         malyon-opcode-jin
-   malyon-opcode-test            malyon-opcode-or
-   malyon-opcode-and             malyon-opcode-test-attr
-   malyon-opcode-set-attr        malyon-opcode-clear-attr
-   malyon-opcode-store           malyon-opcode-insert-obj
-   malyon-opcode-loadw           malyon-opcode-loadb
-   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
-   malyon-opcode-get-next-prop   malyon-opcode-add
-   malyon-opcode-sub             malyon-opcode-mul
-   malyon-opcode-div             malyon-opcode-mod
-   malyon-opcode-calls           malyon-opcode-calln
-   malyon-opcode-set-color       malyon-opcode-throw
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-je              malyon-opcode-jl
-   malyon-opcode-jg              malyon-opcode-dec-chk
-   malyon-opcode-inc-chk         malyon-opcode-jin
-   malyon-opcode-test            malyon-opcode-or
-   malyon-opcode-and             malyon-opcode-test-attr
-   malyon-opcode-set-attr        malyon-opcode-clear-attr
-   malyon-opcode-store           malyon-opcode-insert-obj
-   malyon-opcode-loadw           malyon-opcode-loadb
-   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
-   malyon-opcode-get-next-prop   malyon-opcode-add
-   malyon-opcode-sub             malyon-opcode-mul
-   malyon-opcode-div             malyon-opcode-mod
-   malyon-opcode-calls           malyon-opcode-calln
-   malyon-opcode-set-color       malyon-opcode-throw
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-je              malyon-opcode-jl 
-   malyon-opcode-jg              malyon-opcode-dec-chk
-   malyon-opcode-inc-chk         malyon-opcode-jin
-   malyon-opcode-test            malyon-opcode-or
-   malyon-opcode-and             malyon-opcode-test-attr
-   malyon-opcode-set-attr        malyon-opcode-clear-attr
-   malyon-opcode-store           malyon-opcode-insert-obj
-   malyon-opcode-loadw           malyon-opcode-loadb
-   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
-   malyon-opcode-get-next-prop   malyon-opcode-add
-   malyon-opcode-sub             malyon-opcode-mul
-   malyon-opcode-div             malyon-opcode-mod
-   malyon-opcode-calls           malyon-opcode-calln
-   malyon-opcode-set-color       malyon-opcode-throw
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-je              malyon-opcode-jl
-   malyon-opcode-jg              malyon-opcode-dec-chk
-   malyon-opcode-inc-chk         malyon-opcode-jin
-   malyon-opcode-test            malyon-opcode-or
-   malyon-opcode-and             malyon-opcode-test-attr
-   malyon-opcode-set-attr        malyon-opcode-clear-attr
-   malyon-opcode-store           malyon-opcode-insert-obj
-   malyon-opcode-loadw           malyon-opcode-loadb
-   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
-   malyon-opcode-get-next-prop   malyon-opcode-add
-   malyon-opcode-sub             malyon-opcode-mul
-   malyon-opcode-div             malyon-opcode-mod
-   malyon-opcode-calls           malyon-opcode-calln
-   malyon-opcode-set-color       malyon-opcode-throw
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-nop             malyon-opcode-jz
-   malyon-opcode-get-sibling     malyon-opcode-get-child
-   malyon-opcode-get-parent      malyon-opcode-get-prop-len
-   malyon-opcode-inc             malyon-opcode-dec
-   malyon-opcode-print-addr      malyon-opcode-calls
-   malyon-opcode-remove-obj      malyon-opcode-print-obj
-   malyon-opcode-ret             malyon-opcode-jump
-   malyon-opcode-print-paddr     malyon-opcode-load
-   malyon-opcode-calln           malyon-opcode-jz
-   malyon-opcode-get-sibling     malyon-opcode-get-child
-   malyon-opcode-get-parent      malyon-opcode-get-prop-len
-   malyon-opcode-inc             malyon-opcode-dec
-   malyon-opcode-print-addr      malyon-opcode-calls
-   malyon-opcode-remove-obj      malyon-opcode-print-obj
-   malyon-opcode-ret             malyon-opcode-jump
-   malyon-opcode-print-paddr     malyon-opcode-load
-   malyon-opcode-calln           malyon-opcode-jz
-   malyon-opcode-get-sibling     malyon-opcode-get-child
-   malyon-opcode-get-parent      malyon-opcode-get-prop-len
-   malyon-opcode-inc             malyon-opcode-dec
-   malyon-opcode-print-addr      malyon-opcode-calls
-   malyon-opcode-remove-obj      malyon-opcode-print-obj
-   malyon-opcode-ret             malyon-opcode-jump
-   malyon-opcode-print-paddr     malyon-opcode-load
-   malyon-opcode-calln           malyon-opcode-rtrue
-   malyon-opcode-rfalse          malyon-opcode-print
-   malyon-opcode-print-ret       malyon-opcode-nop
-   malyon-opcode-illegal         malyon-opcode-illegal
-   malyon-opcode-restart         malyon-opcode-ret-popped
-   malyon-opcode-catch           malyon-opcode-quit
-   malyon-opcode-new-line        malyon-opcode-illegal
-   malyon-opcode-verify          malyon-opcode-illegal
-   malyon-opcode-piracy          malyon-opcode-nop
-   malyon-opcode-je              malyon-opcode-jl
-   malyon-opcode-jg              malyon-opcode-dec-chk
-   malyon-opcode-inc-chk         malyon-opcode-jin
-   malyon-opcode-test            malyon-opcode-or
-   malyon-opcode-and             malyon-opcode-test-attr
-   malyon-opcode-set-attr        malyon-opcode-clear-attr
-   malyon-opcode-store           malyon-opcode-insert-obj
-   malyon-opcode-loadw           malyon-opcode-loadb
-   malyon-opcode-get-prop        malyon-opcode-get-prop-addr
-   malyon-opcode-get-next-prop   malyon-opcode-add
-   malyon-opcode-sub             malyon-opcode-mul
-   malyon-opcode-div             malyon-opcode-mod
-   malyon-opcode-calls           malyon-opcode-calln
-   malyon-opcode-set-color       malyon-opcode-throw
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-nop             malyon-opcode-calls
-   malyon-opcode-storew          malyon-opcode-storeb
-   malyon-opcode-put-prop        malyon-opcode-aread
-   malyon-opcode-print-char      malyon-opcode-print-num
-   malyon-opcode-random          malyon-opcode-push
-   malyon-opcode-pull            malyon-opcode-split-window
-   malyon-opcode-set-window      malyon-opcode-calls
-   malyon-opcode-erase-window    malyon-opcode-erase-line
-   malyon-opcode-set-cursor      malyon-opcode-get-cursor
-   malyon-opcode-set-text-style  malyon-opcode-buffer-mode
-   malyon-opcode-output-stream   malyon-opcode-input-stream
-   malyon-opcode-nop             malyon-opcode-read-char
-   malyon-opcode-scan-table      malyon-opcode-not
-   malyon-opcode-calln           malyon-opcode-calln
-   malyon-opcode-tokenise        malyon-opcode-encode-text
-   malyon-opcode-copy-table      malyon-opcode-print-table
-   malyon-opcode-check-arg-count malyon-opcode-save
-   malyon-opcode-restore         malyon-opcode-log-shift
-   malyon-opcode-art-shift       malyon-opcode-set-font
-   malyon-opcode-illegal         malyon-opcode-illegal
-   malyon-opcode-illegal         malyon-opcode-illegal
-   malyon-opcode-save-undo       malyon-opcode-restore-undo
-   malyon-opcode-print-unicode   malyon-opcode-check-unicode
-   malyon-opcode-nop             malyon-opcode-nop
-   malyon-opcode-nop]
-  "A vector of all known legal z code opcodes.")
 
 ;; opcodes
 
