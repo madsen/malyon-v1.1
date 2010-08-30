@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 1999-2002 Peter Ilberg
 
-;; Maintainer: Peter Ilberg <peter.ilberg@natinst.com>
+;; Maintainer: Peter Ilberg <peter.ilberg@ni.com>
 
 ;; Credits:
 ;;   Alberto Petrofsky <Alberto@petrofsky.berkeley.ca.us> enabled
@@ -17,7 +17,7 @@
 
 ;; Note that this package is by no means complete and bug free.
 ;; If you encounter a bug please send a report to Peter Ilberg at 
-;; peter.ilberg@natinst.com. Thank you!
+;; peter.ilberg@ni.com. Thank you!
 
 ;; To play a story file simple type M-x malyon and enter the path to the
 ;; story file. If anything goes wrong and you want to manually clean
@@ -132,7 +132,16 @@ progress by typing M-x malyon-restore."
   "Erase the given buffer."
   (save-excursion
     (if buffer (set-buffer buffer))
-    (erase-buffer)))
+    (if (eq buffer malyon-transcript-buffer)
+	(progn
+	  (if malyon-print-separator
+	      (progn
+		(mapc 'malyon-putchar-transcript '(?\n ?\n ?* ?  ?* ?  ?*))
+		(center-line)
+		(mapc 'malyon-putchar-transcript '(?\n ?\n))
+		(setq malyon-print-separator nil)))
+	  (narrow-to-region (point-max) (point-max)))
+      (erase-buffer))))
 
 (if (fboundp 'mapc)
     (defalias 'malyon-mapc 'mapc)
@@ -519,6 +528,7 @@ progress by typing M-x malyon-restore."
 	(+ 4 malyon-dictionary (malyon-read-byte malyon-dictionary)))
   (setq malyon-dictionary-word-length (if (< malyon-story-version 5) 3 5))
   (setq malyon-current-face 'malyon-face-plain)
+  (setq malyon-print-separator nil)
   (malyon-initialize-output-streams))
 
 (defun malyon-initialize-opcodes ()
@@ -571,6 +581,7 @@ progress by typing M-x malyon-restore."
 	      (switch-to-buffer (get-buffer "Malyon Transcript"))
 	      (malyon-redisplay-frame (selected-frame) t)
 	      (delete-other-windows (get-buffer-window (current-buffer)))
+	      (widen)
 	      (text-mode)))
 	(setq malyon-status-buffer nil)
 	(setq malyon-transcript-buffer nil))
@@ -670,7 +681,7 @@ addresses.")
   (setq malyon-default-unicode-table
 	[#x20                                    ;   0
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00      ;   1 -   7
-	 #x08 #x00 ?\n  #x00 #x00 ?\n  #x00 #x00 ;   8 -  15
+	 #x08 #x00 ?\n  #x00 #x00 ?\r  #x00 #x00 ;   8 -  15
 	 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 ;  16 -  23
 	 #x00 #x00 #x00 #x27 #x00 #x00 #x00 #x00 ;  24 -  31
 	 #x20 #x21 #x22 #x23 #x24 #x25 #x26 #x27 ;  32 -  39
@@ -806,6 +817,9 @@ addresses.")
 (defvar malyon-current-face nil
   "The current face in which to display text.")
 
+(defvar malyon-print-separator nil
+  "A flag indicating whether to print the * * * separator.")
+
 (defsubst malyon-abbrev (abbrev x)
   "Print an abbreviation."
   (malyon-print-ztext
@@ -909,7 +923,8 @@ addresses.")
   "Print a single character in the transcript window."
   (if (char-equal char ?\n)
       (newline 1)
-    (insert char))
+    (insert char)
+    (setq malyon-print-separator (null (member char malyon-whitespace))))
   (if (and malyon-transcript-buffer-buffered
 	   (> (current-column) (current-fill-column)))
       (progn
