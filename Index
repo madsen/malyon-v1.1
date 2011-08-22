@@ -2,5 +2,4 @@
 Index           this file
 
 malyon.el       Malyon, a version 3, 5, and 8 z-code interpreter 
-                written entirely in elisp for Xemacs 21.00 and 
-                GNUemacs 20.5.
+                written entirely in elisp for Xemacs and GNUemacs.
