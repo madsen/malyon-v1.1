@@ -1,6 +1,8 @@
 ; malyon.el --- mode to execute z code files version 3, 5, 8
 
 ;; Maintainer: Peter Ilberg <peter.ilberg@gmail.com>
+;; (I am unable to continue supporting malyon.el. Please send me an
+;;  email if you are interested in taking over the project. Thanks.)
 
 ;; Copyright (C) 1999-2011 Peter Ilberg
 
@@ -921,12 +923,12 @@ bugs, testing, suggesting and/or contributing improvements:
 (defun malyon-print-header ()
   "Print malyon mode header information."
   (malyon-opcode-set-text-style 2)
-  (malyon-print "Malyon V 1.0.2")
+  (malyon-print "Malyon V 1.0.3")
   (malyon-opcode-set-text-style 0)
   (malyon-newline)
   (malyon-print "A z-code interpreter for version 3, 5, and 8 games.")
   (malyon-newline)
-  (malyon-print "(c) 1999-2009 by Peter Ilberg <peter.ilberg@gmail.com>")
+  (malyon-print "(c) 1999-2011 by Peter Ilberg <peter.ilberg@gmail.com>")
   (malyon-newline)
   (malyon-newline))
 

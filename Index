@@ -1,5 +1,6 @@
 
 Index           this file
 
-malyon.el       Malyon, a version 3, 5, and 8 z-code interpreter 
-                written entirely in elisp for Xemacs and GNUemacs.
+malyon.el       Malyon is a z-code interpreter for emacs that can play .z3,
+                .z5 and .z8 story files. The current version of Malyon is
+                1.0.3 and it is released under a MIT-style license.
