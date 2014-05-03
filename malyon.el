@@ -210,24 +210,26 @@ addresses.")
   "Major mode for playing z3/5/8 story files.
 This mode allows execution of version 3, 5, 8 z code story files."
   (interactive "fStory file name: ")
-  (if malyon-story-file
-      (message "You are already playing a game.")
-    (if (not (string-match ".*\.z[358]$" file-name))
-        (message "%s is not a version 3, 5, or 8 story file." file-name)
-      (condition-case nil
-          (malyon-load-story-file file-name)
-        (error
-         (malyon-fatal-error "loading of story file failed.")))
-      (setq malyon-story-version (aref malyon-story-file 0))
-      (cond ((memq malyon-story-version malyon-supported-versions)
-             (condition-case nil
-                 (malyon-initialize)
-               (error
-                (malyon-fatal-error "initialization of interpreter failed.")))
-             (malyon-interpreter))
-            (t
-             (message "%s is not a version 3, 5, or 8 story file." file-name)
-             (malyon-cleanup))))))
+  (and malyon-story-file
+       (error "You are already playing a game."))
+  (cond
+   ((string-match ".*\.z[358]$" file-name)
+    (condition-case nil
+        (malyon-load-story-file file-name)
+      (error
+       (malyon-fatal-error "loading of story file failed."))))
+   (t
+    (error "%s is not a version 3, 5, or 8 story file." file-name)))
+  (setq malyon-story-version (aref malyon-story-file 0))
+  (cond ((memq malyon-story-version malyon-supported-versions)
+         (condition-case nil
+             (malyon-initialize)
+           (error
+            (malyon-fatal-error "initialization of interpreter failed.")))
+         (malyon-interpreter))
+        (t
+         (message "%s is not a version 3, 5, or 8 story file." file-name)
+         (malyon-cleanup))))
 
 (defun malyon-restore ()
   "Restore the save window configuration for the interpreter."
@@ -764,25 +766,32 @@ bugs, testing, suggesting and/or contributing improvements:
 
 ;; initialization
 
+(defun malyon-load-story-from-buffer (min max)
+  "Load a z code story into an internal vector."
+  (setq malyon-story-file (malyon-string-to-vector
+                           (buffer-substring-no-properties min max)))
+  (if (not (eq ?\^A 1))
+      (let ((i 0))
+        (while (< i (length malyon-story-file))
+          (aset malyon-story-file
+                i
+                (malyon-char-to-int (aref malyon-story-file i)))
+          (setq i (+ 1 i)))))
+  )
+
+(defun malyon-load-file (file-name)
+  "Load a binary file into the current buffer."
+  (malyon-disable-multibyte)
+  (malyon-erase-buffer)
+  (let ((coding-system-for-read 'binary))
+    (insert-file-contents file-name)))
+
 (defun malyon-load-story-file (file-name)
   "Load a z code story file into an internal vector."
   (with-temp-buffer
-    (malyon-disable-multibyte)
-    (malyon-erase-buffer)
-    (let ((coding-system-for-read 'binary))
-      (insert-file-contents file-name))
+    (malyon-load-file file-name)
     (setq malyon-story-file-name file-name)
-    (setq malyon-story-file (buffer-substring-no-properties (point-min)
-                                                            (point-max)))
-    (setq malyon-story-file (malyon-string-to-vector malyon-story-file))
-    (if (not (eq ?\^A 1))
-        (let ((i 0))
-          (while (< i (length malyon-story-file))
-            (aset malyon-story-file
-                  i
-                  (malyon-char-to-int (aref malyon-story-file i)))
-            (setq i (+ 1 i)))))
-    ))
+    (malyon-load-story-from-buffer (point-min) (point-max))))
 
 (defun malyon-initialize ()
   "Initialize the z code interpreter."
@@ -1837,10 +1846,7 @@ gets the remaining lines."
         (save-excursion
           (setq malyon-restore-data-error nil)
           (set-buffer (create-file-buffer file))
-          (malyon-disable-multibyte)
-          (malyon-erase-buffer)
-          (let ((coding-system-for-read 'binary))
-            (insert-file-contents file))
+          (malyon-load-file file)
           (goto-char (point-min))
           (if table
               (malyon-restore-table table length)
