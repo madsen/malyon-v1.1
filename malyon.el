@@ -766,8 +766,7 @@ bugs, testing, suggesting and/or contributing improvements:
 
 (defun malyon-load-story-file (file-name)
   "Load a z code story file into an internal vector."
-  (save-excursion
-    (set-buffer (create-file-buffer file-name))
+  (with-temp-buffer
     (malyon-disable-multibyte)
     (malyon-erase-buffer)
     (let ((coding-system-for-read 'binary))
@@ -783,7 +782,7 @@ bugs, testing, suggesting and/or contributing improvements:
                   i
                   (malyon-char-to-int (aref malyon-story-file i)))
             (setq i (+ 1 i)))))
-    (kill-buffer nil)))
+    ))
 
 (defun malyon-initialize ()
   "Initialize the z code interpreter."
@@ -962,8 +961,7 @@ bugs, testing, suggesting and/or contributing improvements:
   "Print error message and abort."
   (setq message (concat "Malyon fatal error: " message))
   (unwind-protect
-      (save-excursion
-        (set-buffer malyon-transcript-buffer)
+      (with-current-buffer malyon-transcript-buffer
         (goto-char (point-max))
         (newline)
         (newline)
@@ -1530,8 +1528,7 @@ bugs, testing, suggesting and/or contributing improvements:
 
 (defun malyon-prepare-status-buffer (status)
   "Fill the status buffer with empty lines."
-  (save-excursion
-    (set-buffer malyon-status-buffer)
+  (with-current-buffer malyon-status-buffer
     (let ((lines (count-lines (point-min) (point-max)))
           (new   status))
       (if (zerop lines)
@@ -1672,20 +1669,17 @@ gets the remaining lines."
   "Save the current game state or a memory section to disk."
   (interactive "FSave file: ")
   (condition-case nil
-      (save-excursion
-        (set-buffer (create-file-buffer file))
-        (malyon-disable-multibyte)
-        (malyon-erase-buffer)
-        (cond (table (malyon-save-table table length))
-              (malyon-game-state-quetzal
-               (malyon-save-quetzal-state (malyon-current-game-state)))
-              (t
-               (malyon-save-game-state (malyon-current-game-state))))
-        (let ((coding-system-for-write 'binary))
-          (write-file file))
-        (kill-buffer nil)
-        1)
-    (error 0)))
+      (let ((coding-system-for-write 'binary))
+        (with-temp-file file
+          (malyon-disable-multibyte)
+          (malyon-erase-buffer)
+          (cond (table (malyon-save-table table length))
+                (malyon-game-state-quetzal
+                 (malyon-save-quetzal-state (malyon-current-game-state)))
+                (t
+                 (malyon-save-game-state (malyon-current-game-state))))
+          1))
+      (error 0)))
 
 (defun malyon-save-table (table length)
   "Save the given section of memory to the file."
@@ -2489,8 +2483,7 @@ The result is stored at encoded."
 
 (defun malyon-opcode-get-cursor (array)
   "Retrieves the current cursor position."
-  (save-excursion
-    (set-buffer malyon-status-buffer)
+  (with-current-buffer malyon-status-buffer
     (malyon-store-word array (- (count-lines (point-min) (point)) 1))
     (malyon-store-word (+ 2 array) (+ 1 (current-column)))))
 
@@ -3074,7 +3067,7 @@ The result is stored at encoded."
       (progn
         (malyon-store-variable
          (malyon-read-code-byte)
-         (malyon-char-to-int (malyon-unicode-to-zscii last-command-char)))
+         (malyon-char-to-int (malyon-unicode-to-zscii last-command-event)))
         (use-local-map malyon-keymap-read)
         (malyon-interpreter))
     (error
@@ -3087,8 +3080,7 @@ The result is stored at encoded."
     (cond ((> malyon-aread-beginning-of-line (point))
            (funcall malyon-history-saved-up arg))
           (input
-           (save-excursion
-             (set-buffer malyon-transcript-buffer)
+           (with-current-buffer malyon-transcript-buffer
              (delete-region malyon-aread-beginning-of-line (point-max)))
            (goto-char (point-max))
            (insert input)
@@ -3101,8 +3093,7 @@ The result is stored at encoded."
     (cond ((> malyon-aread-beginning-of-line (point))
            (funcall malyon-history-saved-down arg))
           (input
-           (save-excursion
-             (set-buffer malyon-transcript-buffer)
+           (with-current-buffer malyon-transcript-buffer
              (delete-region malyon-aread-beginning-of-line (point-max)))
            (goto-char (point-max))
            (insert input)
@@ -3179,8 +3170,7 @@ The result is stored at encoded."
          (get-buffer-create
           (concat "Malyon Trace " malyon-story-file-name))))
     (if trace
-        (save-excursion
-          (set-buffer trace)
+        (with-current-buffer trace
           (malyon-erase-buffer)
           (insert (concat "Tracing " malyon-story-file-name "..."))
           (newline)))))
@@ -3189,8 +3179,7 @@ The result is stored at encoded."
   "Output tracing newline."
   (let ((trace (get-buffer (concat "Malyon Trace " malyon-story-file-name))))
     (if trace
-        (save-excursion
-          (set-buffer trace)
+        (with-current-buffer trace
           (goto-char (point-max))
           (newline)))))
 
@@ -3214,8 +3203,7 @@ The result is stored at encoded."
   "Output tracing string."
   (let ((trace (get-buffer (concat "Malyon Trace " malyon-story-file-name))))
     (if (and trace s)
-        (save-excursion
-          (set-buffer trace)
+        (with-current-buffer trace
           (goto-char (point-max))
           (insert s)))))
 
@@ -3223,8 +3211,7 @@ The result is stored at encoded."
   "Output tracing object."
   (let ((trace (get-buffer (concat "Malyon Trace " malyon-story-file-name))))
     (if (and trace o)
-        (save-excursion
-          (set-buffer trace)
+        (with-current-buffer trace
           (goto-char (point-max))
           (prin1 o trace)))))
 
