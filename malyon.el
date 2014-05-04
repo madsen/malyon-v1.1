@@ -978,7 +978,9 @@ bugs, testing, suggesting and/or contributing improvements:
          (aset malyon-opcodes 181 'malyon-opcode-illegal)
          (aset malyon-opcodes 182 'malyon-opcode-illegal)
          (aset malyon-opcodes 185 'malyon-opcode-catch)
-         (aset malyon-opcodes 188 'malyon-opcode-illegal))))
+         ;; Technically, 188 (show_status) is v3 only, but Version 5 Release 23
+         ;; of Wishbringer contains it by accident, so treat it as NOP instead.
+         (aset malyon-opcodes 188 'malyon-opcode-nop))))
 
 (defun malyon-print-header ()
   "Print malyon mode header information."
