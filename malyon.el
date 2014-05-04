@@ -74,6 +74,11 @@
 
 (defconst malyon-version "1.1" "Malyon version number")
 
+(defgroup malyon nil
+  "Play Z-machine interactive fiction games."
+  :prefix "malyon-"
+  :group 'games)
+
 ;; story file information
 
 (defvar malyon-story-file-name nil
@@ -508,21 +513,38 @@ bugs, testing, suggesting and/or contributing improvements:
                              'malyon-more-char-status
                              malyon-keymap-more-status (current-global-map)))
 
-(defvar malyon-faces nil
-  "An association list of text faces used by the malyon mode.")
+(defface malyon-face-plain
+  '((t :inherit default))
+  "Basic face for game text."
+  :group 'malyon)
 
-(defun malyon-initialize-faces ()
-  (copy-face 'default  'malyon-face-plain)
-  (copy-face 'bold     'malyon-face-reverse)
-  (copy-face 'bold     'malyon-face-bold)
-  (copy-face 'italic   'malyon-face-italic)
-  (copy-face 'default  'malyon-face-error)
-  (set-face-foreground 'malyon-face-error "red")
-  (setq malyon-faces '((0 . malyon-face-plain)
-                       (1 . malyon-face-reverse)
-                       (2 . malyon-face-bold)
-                       (4 . malyon-face-italic)
-                       (8 . malyon-face-plain))))
+(defface malyon-face-bold
+  '((t :inherit bold))
+  "Bold face for game text."
+  :group 'malyon)
+
+(defface malyon-face-error
+  '((t :inherit error))
+  "Face for game errors."
+  :group 'malyon)
+
+(defface malyon-face-italic
+  '((t :inherit italic))
+  "Italic face for game text."
+  :group 'malyon)
+
+(defface malyon-face-reverse
+  '((t :inherit default :inverse-video t))
+  "Face for reverse-video text."
+  :group 'malyon)
+
+(defvar malyon-faces
+  '((0 . malyon-face-plain)
+    (1 . malyon-face-reverse)
+    (2 . malyon-face-bold)
+    (4 . malyon-face-italic)
+    (8 . malyon-face-plain))
+  "An association list of text faces used by the malyon mode.")
 
 (defvar malyon-print-separator nil
   "A flag indicating whether to print the * * * separator.")
@@ -848,7 +870,6 @@ bugs, testing, suggesting and/or contributing improvements:
   "Initialize the Z-code interpreter."
 ;  (malyon-trace-file)
   (setq malyon-game-state-quetzal t)
-  (malyon-initialize-faces)
   (malyon-initialize-status)
   (malyon-initialize-transcript)
   (malyon-initialize-windows)
