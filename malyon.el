@@ -865,6 +865,7 @@ bugs, testing, suggesting and/or contributing improvements:
   (switch-to-buffer malyon-status-buffer)
   (malyon-erase-buffer)
   (kill-all-local-variables)
+  (setq cursor-in-non-selected-windows nil)
   (setq malyon-status-buffer-point (point))
   (setq malyon-status-buffer-lines 0)
   (setq malyon-status-buffer-delayed-split nil)
