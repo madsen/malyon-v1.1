@@ -903,7 +903,7 @@ bugs, testing, suggesting and/or contributing improvements:
   (malyon-store-byte 1
                      (if (>= malyon-story-version 5)
                          28
-                       (logior 48 (malyon-read-byte 1))))
+                       (logior #x20 (logand #b111 (malyon-read-byte 1)))))
   (malyon-store-byte 16 (logand 440 (malyon-read-byte 16)))
   (malyon-store-byte 30 1)
   (malyon-store-byte 31 65)
