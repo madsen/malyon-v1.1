@@ -2912,7 +2912,10 @@ The result is stored at encoded."
 (defun malyon-opcode-set-cursor (&optional line column)
   "Set the cursor."
   (if (eq malyon-transcript-buffer (current-buffer))
+      ;; set-cursor is not currently supported in the transcript buffer.
+      ;; It just jumps to the end.
       (goto-char (point-max))
+    ;; We're setting the position in the status buffer
     (if malyon-status-buffer-delayed-split
         (progn
           (malyon-split-buffer-windows malyon-status-buffer-delayed-split)
@@ -2924,11 +2927,11 @@ The result is stored at encoded."
           (malyon-split-buffer-windows line)
           (other-window 1)))
     (goto-char (point-min))
-    (if (and (<= 1 line) (<= line malyon-status-buffer-lines))
-        (forward-line line)
+    (if (and (< 1 line) (<= line malyon-status-buffer-lines))
+        (forward-line (1- line))
       (beginning-of-line))
-    (if (and (<= 1 column) (<= column malyon-max-column))
-        (forward-char (- column 1))
+    (if (and (< 1 column) (<= column malyon-max-column))
+        (forward-char (1- column))
       (beginning-of-line))
     (setq malyon-status-buffer-point (point))))
 
