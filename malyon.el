@@ -2987,6 +2987,7 @@ The result is stored at encoded."
       (malyon-restore-window-configuration)
       (malyon-opcode-set-window 1)
       (malyon-prepare-status-buffer 1)
+      (put-text-property (point-min) (point-max) 'face 'malyon-face-reverse)
       (malyon-opcode-set-cursor 1 1)
       (malyon-opcode-print-obj (malyon-read-global-variable 0))
       (if (<= (current-column) (- (current-fill-column) 10))
