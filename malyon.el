@@ -72,6 +72,8 @@
 
 ;; global variables - moved here to appease the byte-code compiler
 
+(defconst malyon-version "1.1" "Malyon version number")
+
 ;; story file information
 
 (defvar malyon-story-file-name nil
@@ -213,6 +215,8 @@ This mode allows execution of version 3, 5, 8 z code story files."
   (and malyon-story-file
        (error "You are already playing a game."))
   (cond
+   ((string-match ".*\.\\(?:z?blorb\\|blb\\|zlb\\)$" file-name)
+    (malyon-load-blorb-file file-name))
    ((string-match ".*\.z[358]$" file-name)
     (condition-case nil
         (malyon-load-story-file file-name)
@@ -786,6 +790,53 @@ bugs, testing, suggesting and/or contributing improvements:
   (let ((coding-system-for-read 'binary))
     (insert-file-contents file-name)))
 
+(defconst malyon-iff-chunk-spec
+  '((:id     str 4)
+    (:length u32))
+  "Description of an IFF chunk header.")
+
+(defconst malyon-RIdx-spec
+  '((:num u32)
+    (:resources repeat (:num) (:usage str 4) (:number u32) (:start u32)))
+  "Description of the RIdx chunk.")
+
+(defun malyon-unpack (spec start length)
+  "Unpack LENGTH bytes at 0-based offset START according to SPEC."
+  (bindat-unpack spec (buffer-substring-no-properties (1+ start)
+                                                      (+ 1 start length))))
+
+(defun malyon-load-blorb-file (file-name)
+  "Load a Z-code Blorb file into an internal vector."
+  (require 'bindat)
+  (require 'cl-lib)
+  (with-temp-buffer
+    (malyon-load-file file-name)
+    ;; Check the signature.  Must be an IFF file of type IFRS
+    ;; starting with an RIdx chunk.
+    (or (and (string= "FORM" (buffer-substring-no-properties 1 5))
+             (string= "IFRSRIdx" (buffer-substring-no-properties 9 17)))
+        (error "Not a Blorb file"))
+    ;; Unpack the RIdx chunk, find the Exec chunck, and unpack its header.
+    (let* ((ridx-header (malyon-unpack malyon-iff-chunk-spec 12 8))
+           (ridx        (malyon-unpack malyon-RIdx-spec 20
+                                       (cdr (assq :length ridx-header))))
+           (exec (cl-find-if
+                  (function
+                   (lambda (r)
+                     (and (= 0 (cdr (assq :number r)))
+                          (string= "Exec" (cdr (assq :usage r))))))
+                  (cdr (assq :resources ridx))))
+           (story-start (cdr (assq :start exec)))
+           (exec-header (malyon-unpack malyon-iff-chunk-spec story-start 8)))
+      ;; Ensure that the Exec chunk is Z-code.
+      (or (string= "ZCOD" (cdr (assq :id exec-header)))
+          (error "Not a Z-code Blorb file"))
+      ;; Load the Z-code from the chunk.
+      (setq malyon-story-file-name file-name)
+      (malyon-load-story-from-buffer (+ 9 story-start)
+                                     (+ 9 story-start
+                                        (cdr (assq :length exec-header)))))))
+
 (defun malyon-load-story-file (file-name)
   "Load a z code story file into an internal vector."
   (with-temp-buffer
@@ -931,7 +982,7 @@ bugs, testing, suggesting and/or contributing improvements:
 (defun malyon-print-header ()
   "Print malyon mode header information."
   (malyon-opcode-set-text-style 2)
-  (malyon-print "Malyon V 1.0.3")
+  (malyon-print (concat "Malyon V " malyon-version))
   (malyon-opcode-set-text-style 0)
   (malyon-newline)
   (malyon-print "A z-code interpreter for version 3, 5, and 8 games.")
