@@ -38,7 +38,7 @@
 ;; If you encounter a bug please send a report to Peter Ilberg at
 ;; peter.ilberg@gmail.com. Thank you!
 
-;; To play a story file simple type M-x malyon and enter the path to the
+;; To play a story file simply type M-x malyon and enter the path to the
 ;; story file. If anything goes wrong and you want to manually clean
 ;; up type M-x malyon-quit. In addition, you can switch back to a game in
 ;; progress by typing M-x malyon-restore.
