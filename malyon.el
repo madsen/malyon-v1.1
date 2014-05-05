@@ -887,6 +887,7 @@ bugs, testing, suggesting and/or contributing improvements:
   (malyon-erase-buffer)
   (kill-all-local-variables)
   (setq cursor-in-non-selected-windows nil)
+  (setq mode-line-format nil)
   (setq malyon-status-buffer-point (point))
   (setq malyon-status-buffer-lines 0)
   (setq malyon-status-buffer-delayed-split nil)
@@ -914,7 +915,6 @@ bugs, testing, suggesting and/or contributing improvements:
 
 (defun malyon-initialize-windows ()
   "Initialize the window configuration for the z machine."
-  (setq window-min-height 3)
   (setq malyon-transcript-buffer-buffered t)
   (malyon-set-window-configuration 0)
   (malyon-opcode-set-window 0))
@@ -1658,7 +1658,7 @@ gets the remaining lines."
   (setq malyon-status-buffer-delayed-split nil)
   (if (zerop status)
       '()
-    (split-window (get-buffer-window (current-buffer)) (+ status 3))
+    (split-window (get-buffer-window (current-buffer)) status)
     (switch-to-buffer malyon-status-buffer)
     (malyon-prepare-status-buffer status)
     (malyon-opcode-set-cursor 1 1)
