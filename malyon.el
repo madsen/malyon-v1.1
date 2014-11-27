@@ -79,6 +79,14 @@
   :prefix "malyon-"
   :group 'games)
 
+;; customizable variables
+
+(defcustom malyon-stories-directory nil
+  "The default directory to look for story files.
+Nil means use the buffer's default directory."
+  :type '(choice (const nil) directory)
+  :group 'malyon)
+
 ;; story file information
 
 (defvar malyon-story-file-name nil
@@ -214,31 +222,41 @@ addresses.")
 ;; interactive functions
 
 (defun malyon (file-name)
-  "Major mode for playing z3/5/8 story files.
-This mode allows execution of version 3, 5, 8 Z-code story files."
-  (interactive "fStory file name: ")
-  (and malyon-story-file
-       (error "You are already playing a game."))
-  (cond
-   ((string-match ".*\.\\(?:z?blorb\\|blb\\|zlb\\)$" file-name)
-    (malyon-load-blorb-file file-name))
-   ((string-match ".*\.z[358]$" file-name)
-    (condition-case nil
-        (malyon-load-story-file file-name)
-      (error
-       (malyon-fatal-error "loading of story file failed."))))
-   (t
-    (error "%s is not a version 3, 5, or 8 story file." file-name)))
-  (setq malyon-story-version (aref malyon-story-file 0))
-  (cond ((memq malyon-story-version malyon-supported-versions)
-         (condition-case nil
-             (malyon-initialize)
-           (error
-            (malyon-fatal-error "initialization of interpreter failed.")))
-         (malyon-interpreter))
-        (t
-         (message "%s is not a version 3, 5, or 8 story file." file-name)
-         (malyon-cleanup))))
+  "Play a Z-machine interactive fiction game.
+If a game is in progress, restores the game's window configuration.
+Otherwise, you are prompted for a story file to load, which may be
+either a raw Z-code file or one packaged in a Blorb file.
+Z-code versions 3, 5, and 8 are supported."
+  (interactive
+   (list
+    (if malyon-story-file nil
+      (read-file-name "Story file name: " malyon-stories-directory nil t nil
+                      'malyon-valid-story-filenamep))))
+  (if malyon-story-file
+      (if file-name
+          (error "You are already playing a game.")
+        (malyon-restore))
+    ;; Otherwise, we're starting a new game:
+    (cond
+     ((string-match "\\.\\(?:z?blorb\\|blb\\|zlb\\)$" file-name)
+      (malyon-load-blorb-file file-name))
+     ((string-match "\\.z[358]$" file-name)
+      (condition-case nil
+          (malyon-load-story-file file-name)
+        (error
+         (malyon-fatal-error "loading of story file failed."))))
+     (t
+      (error "%s is not a version 3, 5, or 8 story file." file-name)))
+    (setq malyon-story-version (aref malyon-story-file 0))
+    (cond ((memq malyon-story-version malyon-supported-versions)
+           (condition-case nil
+               (malyon-initialize)
+             (error
+              (malyon-fatal-error "initialization of interpreter failed.")))
+           (malyon-interpreter))
+          (t
+           (message "%s is not a version 3, 5, or 8 story file." file-name)
+           (malyon-cleanup)))))
 
 (defun malyon-restore ()
   "Restore the save window configuration for the interpreter."
@@ -791,6 +809,10 @@ bugs, testing, suggesting and/or contributing improvements:
   "A vector of all known legal Z-code opcodes.")
 
 ;; initialization
+
+(defun malyon-valid-story-filenamep (file-name)
+  "Returns non-nil if FILE-NAME is a valid story filename."
+  (string-match "\\.\\(?:z?blorb\\|blb\\|zlb\\|z[358]\\)$" file-name))
 
 (defun malyon-load-story-from-buffer (min max)
   "Load a Z-code story into an internal vector."
