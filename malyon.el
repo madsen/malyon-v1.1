@@ -219,6 +219,19 @@ addresses.")
 (defvar malyon-last-cursor-position-after-input nil
   "The last cursor position after reading input from the keyboard.")
 
+;; error trapping
+
+(defmacro malyon-hide-internal-errors (message bodyform)
+  "Evaluate BODYFORM, substituting MESSAGE for any error."
+  (declare (indent 1))
+  `(condition-case nil
+      ,bodyform
+    (error
+     (malyon-fatal-error ,message))))
+
+;; when debugging, uncomment this NOP version of malyon-hide-internal-errors
+;(defmacro malyon-hide-internal-errors (msg body) (declare (indent 1)) body)
+
 ;; interactive functions
 
 (defun malyon (file-name)
@@ -240,18 +253,14 @@ Z-code versions 3, 5, and 8 are supported."
      ((string-match "\\.\\(?:z?blorb\\|blb\\|zlb\\)$" file-name)
       (malyon-load-blorb-file file-name))
      ((string-match "\\.z[358]$" file-name)
-      (condition-case nil
-          (malyon-load-story-file file-name)
-        (error
-         (malyon-fatal-error "loading of story file failed."))))
+      (malyon-hide-internal-errors "loading of story file failed."
+        (malyon-load-story-file file-name)))
      (t
       (error "%s is not a version 3, 5, or 8 story file." file-name)))
     (setq malyon-story-version (aref malyon-story-file 0))
     (cond ((memq malyon-story-version malyon-supported-versions)
-           (condition-case nil
-               (malyon-initialize)
-             (error
-              (malyon-fatal-error "initialization of interpreter failed.")))
+           (malyon-hide-internal-errors "initialization of interpreter failed."
+             (malyon-initialize))
            (malyon-interpreter))
           (t
            (message "%s is not a version 3, 5, or 8 story file." file-name)
@@ -260,12 +269,10 @@ Z-code versions 3, 5, and 8 are supported."
 (defun malyon-restore ()
   "Restore the save window configuration for the interpreter."
   (interactive)
-  (condition-case nil
-      (progn
-        (malyon-restore-window-configuration)
-        (malyon-adjust-transcript))
-    (error
-     (malyon-fatal-error "restoring window configuration failed."))))
+  (malyon-hide-internal-errors "restoring window configuration failed."
+    (progn
+      (malyon-restore-window-configuration)
+      (malyon-adjust-transcript))))
 
 (defun malyon-quit ()
   "Exit the malyon interpreter."
@@ -1036,25 +1043,23 @@ bugs, testing, suggesting and/or contributing improvements:
 
 (defun malyon-cleanup ()
   "Clean up the Z-code interpreter."
-  (condition-case nil
-      (progn
-        (setq malyon-story-file nil)
-        (setq malyon-window-configuration nil)
-        (setq malyon-game-state-restart nil)
-        (setq malyon-game-state-undo nil)
-        (if (get-buffer "Malyon Status")
-            (kill-buffer (get-buffer "Malyon Status")))
-        (if (get-buffer "Malyon Transcript")
-            (progn
-              (switch-to-buffer (get-buffer "Malyon Transcript"))
-              (malyon-redisplay-frame (selected-frame) t)
-              (delete-other-windows (get-buffer-window (current-buffer)))
-              (widen)
-              (text-mode)))
-        (setq malyon-status-buffer nil)
-        (setq malyon-transcript-buffer nil))
-    (error
-     (malyon-fatal-error "cleanup failed."))))
+  (malyon-hide-internal-errors "cleanup failed."
+    (progn
+      (setq malyon-story-file nil)
+      (setq malyon-window-configuration nil)
+      (setq malyon-game-state-restart nil)
+      (setq malyon-game-state-undo nil)
+      (if (get-buffer "Malyon Status")
+          (kill-buffer (get-buffer "Malyon Status")))
+      (if (get-buffer "Malyon Transcript")
+          (progn
+            (switch-to-buffer (get-buffer "Malyon Transcript"))
+            (malyon-redisplay-frame (selected-frame) t)
+            (delete-other-windows (get-buffer-window (current-buffer)))
+            (widen)
+            (text-mode)))
+      (setq malyon-status-buffer nil)
+      (setq malyon-transcript-buffer nil))))
 
 ;; error handling
 
@@ -2352,16 +2357,14 @@ of arguments, and a list of the evaluation stack elements."
 
 (defun malyon-interpreter ()
   "Run the Z-code interpreter on the given story file."
-  (condition-case nil
-      (progn
-        (malyon-restore-window-configuration)
-        (if malyon-story-file
-            (catch 'malyon-end-of-interpreter-loop
-              (setq malyon-last-cursor-position-after-input
-                    (malyon-point-max malyon-transcript-buffer))
-              (malyon-execute))))
-    (error
-     (malyon-fatal-error "unspecified internal runtime error."))))
+  (malyon-hide-internal-errors "unspecified internal runtime error."
+    (progn
+      (malyon-restore-window-configuration)
+      (if malyon-story-file
+          (catch 'malyon-end-of-interpreter-loop
+            (setq malyon-last-cursor-position-after-input
+                  (malyon-point-max malyon-transcript-buffer))
+            (malyon-execute))))))
 
 (defsubst malyon-fetch-variable-operands (specifier)
   "Fetch a variable number of operands based on the specifier argument."
@@ -3105,39 +3108,37 @@ The result is stored at encoded."
 (defun malyon-end-input ()
   "Store the input line in a text buffer and perform lexical analysis."
   (interactive)
-  (condition-case nil
-      (progn
-        (malyon-adjust-transcript)
-        (switch-to-buffer malyon-transcript-buffer)
-        (goto-char (point-max))
-        (let* ((input (downcase
-                       (buffer-substring-no-properties
-                        (if (< malyon-aread-beginning-of-line (point))
-                            malyon-aread-beginning-of-line
-                          (point))
-                        (point))))
-               (vec  (malyon-string-to-vector input))
-               (text (apply 'vector (mapcar 'malyon-unicode-to-zscii vec)))
-               (len  (min (malyon-read-byte malyon-aread-text) (length text)))
-               (i    0))
-          (malyon-history-insert input)
-          (if (>= malyon-story-version 5)
-              (malyon-store-byte (+ malyon-aread-text 1) len))
-          (while (< i len)
-            (malyon-store-byte
-             (+ malyon-aread-text (if (< malyon-story-version 5) 1 2) i)
-             (malyon-char-to-int (aref text i)))
-            (setq i (+ 1 i)))
-          (if (< malyon-story-version 5)
-              (malyon-store-byte (+ malyon-aread-text 1 len) 0)))
-        (if (/= 0 malyon-aread-parse)
-            (malyon-opcode-tokenise malyon-aread-text malyon-aread-parse))
-        (newline)
+  (malyon-hide-internal-errors "unspecified internal runtime error."
+    (progn
+      (malyon-adjust-transcript)
+      (switch-to-buffer malyon-transcript-buffer)
+      (goto-char (point-max))
+      (let* ((input (downcase
+                     (buffer-substring-no-properties
+                      (if (< malyon-aread-beginning-of-line (point))
+                          malyon-aread-beginning-of-line
+                        (point))
+                      (point))))
+             (vec  (malyon-string-to-vector input))
+             (text (apply 'vector (mapcar 'malyon-unicode-to-zscii vec)))
+             (len  (min (malyon-read-byte malyon-aread-text) (length text)))
+             (i    0))
+        (malyon-history-insert input)
         (if (>= malyon-story-version 5)
-            (malyon-store-variable (malyon-read-code-byte) 10))
-        (malyon-interpreter))
-    (error
-     (malyon-fatal-error "unspecified internal runtime error."))))
+            (malyon-store-byte (+ malyon-aread-text 1) len))
+        (while (< i len)
+          (malyon-store-byte
+           (+ malyon-aread-text (if (< malyon-story-version 5) 1 2) i)
+           (malyon-char-to-int (aref text i)))
+          (setq i (+ 1 i)))
+        (if (< malyon-story-version 5)
+            (malyon-store-byte (+ malyon-aread-text 1 len) 0)))
+      (if (/= 0 malyon-aread-parse)
+          (malyon-opcode-tokenise malyon-aread-text malyon-aread-parse))
+      (newline)
+      (if (>= malyon-story-version 5)
+          (malyon-store-variable (malyon-read-code-byte) 10))
+      (malyon-interpreter))))
 
 (defun malyon-more-char ()
   "Page down in More mode."
@@ -3155,26 +3156,22 @@ The result is stored at encoded."
 (defun malyon-more-char-status ()
   "Wait for a key then continue."
   (interactive)
-  (condition-case nil
-      (progn
-        (malyon-adjust-transcript)
-        (use-local-map malyon-more-continue-keymap)
-        (malyon-interpreter))
-    (error
-     (malyon-fatal-error "unspecified internal runtime error."))))
+  (malyon-hide-internal-errors "unspecified internal runtime error."
+    (progn
+      (malyon-adjust-transcript)
+      (use-local-map malyon-more-continue-keymap)
+      (malyon-interpreter))))
 
 (defun malyon-wait-char ()
   "Store the input character in a variable and resume execution."
   (interactive)
-  (condition-case nil
-      (progn
-        (malyon-store-variable
-         (malyon-read-code-byte)
-         (malyon-char-to-int (malyon-unicode-to-zscii last-command-event)))
-        (use-local-map malyon-keymap-read)
-        (malyon-interpreter))
-    (error
-     (malyon-fatal-error "unspecified internal runtime error."))))
+  (malyon-hide-internal-errors "unspecified internal runtime error."
+    (progn
+      (malyon-store-variable
+       (malyon-read-code-byte)
+       (malyon-char-to-int (malyon-unicode-to-zscii last-command-event)))
+      (use-local-map malyon-keymap-read)
+      (malyon-interpreter))))
 
 (defun malyon-history-previous-char (arg)
   "Display the previous item in the input history."
