@@ -230,8 +230,7 @@ Z-code versions 3, 5, and 8 are supported."
   (interactive
    (list
     (if malyon-story-file nil
-      (read-file-name "Story file name: " malyon-stories-directory nil t nil
-                      'malyon-valid-story-filenamep))))
+      (read-file-name "Story file name: " malyon-stories-directory nil t))))
   (if malyon-story-file
       (if file-name
           (error "You are already playing a game.")
@@ -809,10 +808,6 @@ bugs, testing, suggesting and/or contributing improvements:
   "A vector of all known legal Z-code opcodes.")
 
 ;; initialization
-
-(defun malyon-valid-story-filenamep (file-name)
-  "Returns non-nil if FILE-NAME is a valid story filename."
-  (string-match "\\.\\(?:z?blorb\\|blb\\|zlb\\|z[358]\\)$" file-name))
 
 (defun malyon-load-story-from-buffer (min max)
   "Load a Z-code story into an internal vector."
