@@ -1,7 +1,7 @@
 ; malyon.el --- mode to execute Z-code files version 3, 5, 8
 
 ;; Filename: malyon.el
-;; Description: mode to execute z code files version 3, 5, 8
+;; Description: mode to execute Z-code files version 3, 5, 8
 ;; Created: 1999
 ;; Version: 1.1
 ;; Modified: 2016
